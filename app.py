@@ -34,9 +34,14 @@ st.markdown("""
 # ── SECRETS ───────────────────────────────────────────────────────────────────
 import os as _os
 
-USER_PASSWORD  = _os.environ.get("USER_PASSWORD",  "camp2026")
-LEGAL_PASSWORD = _os.environ.get("LEGAL_PASSWORD", "camplegal2026")
-ADMIN_PASSWORD = _os.environ.get("ADMIN_PASSWORD", "campadmin2026")
+def get_user_password():
+    return _os.environ.get("USER_PASSWORD", "camp2026")
+
+def get_legal_password():
+    return _os.environ.get("LEGAL_PASSWORD", "camplegal2026")
+
+def get_admin_password():
+    return _os.environ.get("ADMIN_PASSWORD", "campadmin2026")
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for key, val in [
@@ -57,23 +62,23 @@ if not st.session_state["authenticated"]:
         st.markdown("### Sign In")
         password = st.text_input("Password:", type="password",
                                   placeholder="Enter your access password")
-        # DEBUG — remove after fixing
-        st.caption(f"App is reading USER_PASSWORD as: {USER_PASSWORD[:3]}***")
+        # DEBUG
+        st.caption(f"Reading: {get_admin_password()[:3]}*** / {get_user_password()[:3]}***")
 
         if st.button("Sign In", type="primary", use_container_width=True):
-            if password == ADMIN_PASSWORD:
+            if password == get_admin_password():
                 st.session_state.update({
                     "authenticated":True, "is_admin":True,
                     "legal_unlocked":True
                 })
                 st.rerun()
-            elif password == LEGAL_PASSWORD:
+            elif password == get_legal_password():
                 st.session_state.update({
                     "authenticated":True, "is_admin":False,
                     "legal_unlocked":True
                 })
                 st.rerun()
-            elif password == USER_PASSWORD:
+            elif password == get_user_password():
                 st.session_state.update({
                     "authenticated":True, "is_admin":False,
                     "legal_unlocked":False
