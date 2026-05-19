@@ -6,11 +6,36 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Ensure API keys from Railway env vars are available
 import os as _os
+
+def _read_config(key):
+    """Read value from config.txt (for passwords) or environment (for API keys)."""
+    # Try config.txt first
+    config_paths = [
+        "/app/config.txt",
+        "./config.txt",
+        "/mount/src/orgmind-camp/config.txt"
+    ]
+    for path in config_paths:
+        if _os.path.exists(path):
+            try:
+                with open(path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith(key + "="):
+                            val = line.split("=", 1)[1].strip()
+                            if val and not val.startswith("replace_with"):
+                                return val
+            except Exception:
+                pass
+    # Fall back to environment variable
+    return _os.environ.get(key, "")
+
+# Load API keys into environment if not already set
 for _key in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]:
-    if _os.environ.get(_key) and not _os.environ.get(_key).startswith("paste"):
-        pass  # Already set correctly
+    _val = _read_config(_key)
+    if _val:
+        _os.environ[_key] = _val
 
 
 from langchain_anthropic import ChatAnthropic

@@ -28,19 +28,35 @@ FOLDER_MAP = {
 }
 
 
+def _read_config(key):
+    """Read from config.txt or environment variable."""
+    config_paths = [
+        "/app/config.txt",
+        "./config.txt",
+        "/mount/src/orgmind-camp/config.txt"
+    ]
+    for path in config_paths:
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith(key + "="):
+                            val = line.split("=", 1)[1].strip()
+                            if val and not val.startswith("replace_with"):
+                                return val
+            except Exception:
+                pass
+    return os.environ.get(key, "")
+
+
 def get_dropbox_client():
-    """Get token from env var (Railway) or Streamlit secrets."""
-    token = os.getenv("DROPBOX_ACCESS_TOKEN", "")
-    if not token:
-        try:
-            import streamlit as st
-            token = st.secrets.get("DROPBOX_ACCESS_TOKEN", "")
-        except Exception:
-            pass
-    if not token or token.startswith("paste-your"):
+    """Get Dropbox token from config.txt or environment."""
+    token = _read_config("DROPBOX_ACCESS_TOKEN")
+    if not token or token.startswith("replace_with"):
         raise ValueError(
             "Dropbox access token not configured. "
-            "Add DROPBOX_ACCESS_TOKEN to your Railway Variables."
+            "Add DROPBOX_ACCESS_TOKEN to your config.txt file."
         )
     return dropbox.Dropbox(token)
 
