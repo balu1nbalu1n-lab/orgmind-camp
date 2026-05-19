@@ -62,7 +62,7 @@ def get_dropbox_client():
 
 
 def sync_from_dropbox():
-    """Download new/updated files from Dropbox. Returns (synced, skipped, errors)."""
+    """Download all files from Dropbox using recursive listing."""
     try:
         dbx = get_dropbox_client()
     except ValueError as e:
@@ -71,37 +71,54 @@ def sync_from_dropbox():
     synced = skipped = 0
     errors = []
 
-    for dropbox_path, local_path in FOLDER_MAP.items():
+    # Create all local folders
+    for _, local_path in FOLDER_MAP.items():
         os.makedirs(local_path, exist_ok=True)
-        try:
-            result = dbx.files_list_folder(dropbox_path)
-            entries = list(result.entries)
-            while result.has_more:
-                result = dbx.files_list_folder_continue(result.cursor)
-                entries.extend(result.entries)
-        except dropbox.exceptions.ApiError as e:
-            if "not_found" in str(e):
-                continue
-            errors.append(f"Cannot list {dropbox_path}: {e}")
+
+    try:
+        # One recursive call instead of per-folder calls
+        result = dbx.files_list_folder(DROPBOX_BASE, recursive=True)
+        entries = list(result.entries)
+        while result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+            entries.extend(result.entries)
+    except Exception as e:
+        return 0, 0, [f"Cannot list Dropbox: {e}"]
+
+    for entry in entries:
+        if not isinstance(entry, dropbox.files.FileMetadata):
+            continue
+        fname = entry.name
+        if not fname.lower().endswith((".pdf", ".docx")):
+            continue
+        if fname.startswith(("~", ".")):
             continue
 
-        for entry in entries:
-            if not isinstance(entry, dropbox.files.FileMetadata):
-                continue
-            fname = entry.name
-            if not fname.lower().endswith((".pdf", ".docx")):
-                continue
-            if fname.startswith(("~", ".")):
-                continue
-            local_file = os.path.join(local_path, fname)
-            if os.path.exists(local_file) and os.path.getsize(local_file) == entry.size:
-                skipped += 1
-                continue
-            try:
-                dbx.files_download_to_file(local_file, f"{dropbox_path}/{fname}")
-                synced += 1
-            except Exception as e:
-                errors.append(f"Cannot download {fname}: {e}")
+        # Match to local folder using FOLDER_MAP
+        dropbox_folder = entry.path_display.rsplit("/", 1)[0]
+        local_path = FOLDER_MAP.get(dropbox_folder)
+
+        if not local_path:
+            # Try case-insensitive match
+            for dp, lp in FOLDER_MAP.items():
+                if dp.lower() == dropbox_folder.lower():
+                    local_path = lp
+                    break
+
+        if not local_path:
+            continue  # File is in unmapped folder — skip
+
+        local_file = os.path.join(local_path, fname)
+
+        if os.path.exists(local_file) and os.path.getsize(local_file) == entry.size:
+            skipped += 1
+            continue
+
+        try:
+            dbx.files_download_to_file(local_file, entry.path_display)
+            synced += 1
+        except Exception as e:
+            errors.append(f"Cannot download {fname}: {e}")
 
     return synced, skipped, errors
 
@@ -135,24 +152,42 @@ def get_local_file_list():
 
 
 def get_dropbox_file_list():
-    """List all Dropbox files per folder for admin display."""
+    """List all files under OrgMind-CAMP root for admin display."""
     try:
         dbx = get_dropbox_client()
     except ValueError as e:
         return {"error": str(e)}
 
     file_list = {}
-    for dropbox_path, _ in FOLDER_MAP.items():
-        label = dropbox_path.replace(DROPBOX_BASE + "/", "")
-        try:
-            result = dbx.files_list_folder(dropbox_path)
-            files = [
-                e.name for e in result.entries
-                if isinstance(e, dropbox.files.FileMetadata)
-                and e.name.lower().endswith((".pdf", ".docx"))
-            ]
-            if files:
-                file_list[label] = sorted(files)
-        except Exception:
-            pass
+    try:
+        # List recursively from root in one call — faster than per-folder
+        result = dbx.files_list_folder(DROPBOX_BASE, recursive=True)
+        entries = list(result.entries)
+
+        # Keep paginating if needed
+        while result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+            entries.extend(result.entries)
+
+        for entry in entries:
+            if not isinstance(entry, dropbox.files.FileMetadata):
+                continue
+            if not entry.name.lower().endswith((".pdf", ".docx")):
+                continue
+            # Get folder label from path
+            folder = entry.path_lower.replace(
+                DROPBOX_BASE.lower() + "/", ""
+            )
+            folder = "/".join(folder.split("/")[:-1]) or "root"
+            if folder not in file_list:
+                file_list[folder] = []
+            file_list[folder].append(entry.name)
+
+        # Sort files in each folder
+        for folder in file_list:
+            file_list[folder] = sorted(file_list[folder])
+
+    except Exception as e:
+        return {"error": f"Could not read Dropbox: {str(e)}"}
+
     return file_list
