@@ -83,9 +83,6 @@ if not st.session_state["authenticated"]:
         st.markdown("### Sign In")
         password = st.text_input("Password:", type="password",
                                   placeholder="Enter your access password")
-        # DEBUG — remove after working
-        st.caption(f"Password source: {get_user_password()[:3]}***")
-
         if st.button("Sign In", type="primary", use_container_width=True):
             if password == get_admin_password():
                 st.session_state.update({
