@@ -33,37 +33,36 @@ st.markdown("""
 
 # ── SECRETS ───────────────────────────────────────────────────────────────────
 import os as _os
-import subprocess as _sp
 
-def _read_env(key, default):
-    # Try multiple methods to read Railway environment variables
-    # Method 1: os.environ direct
-    val = _os.environ.get(key, "")
-    if val and not val.startswith("paste"):
-        return val.strip()
-    # Method 2: os.getenv
-    val = _os.getenv(key, "")
-    if val and not val.startswith("paste"):
-        return val.strip()
-    # Method 3: read from /proc/1/environ (Linux container)
+def _read_config(key, default):
+    """Read from config.txt file — most reliable on Railway."""
     try:
-        with open("/proc/1/environ", "rb") as f:
-            env_data = f.read().decode("utf-8", errors="ignore")
-        for item in env_data.split("\x00"):
-            if item.startswith(key + "="):
-                return item.split("=", 1)[1].strip()
+        config_paths = [
+            "/app/config.txt",
+            "./config.txt",
+            "/mount/src/orgmind-camp/config.txt"
+        ]
+        for path in config_paths:
+            if _os.path.exists(path):
+                with open(path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith(key + "="):
+                            return line.split("=", 1)[1].strip()
     except Exception:
         pass
-    return default
+    # Fallback to env var
+    val = _os.environ.get(key, default)
+    return val
 
 def get_user_password():
-    return _read_env("USER_PASSWORD", "camp2026")
+    return _read_config("USER_PASSWORD", "camp2026")
 
 def get_legal_password():
-    return _read_env("LEGAL_PASSWORD", "camplegal2026")
+    return _read_config("LEGAL_PASSWORD", "camplegal2026")
 
 def get_admin_password():
-    return _read_env("ADMIN_PASSWORD", "campadmin2026")
+    return _read_config("ADMIN_PASSWORD", "campadmin2026")
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for key, val in [
@@ -84,11 +83,8 @@ if not st.session_state["authenticated"]:
         st.markdown("### Sign In")
         password = st.text_input("Password:", type="password",
                                   placeholder="Enter your access password")
-        # DEBUG
-        import os as __os
-        direct = __os.environ.get("USER_PASSWORD", "NOT_FOUND")
-        func = get_user_password()
-        st.caption(f"Direct env: {direct[:4]} | Func: {func[:4]}")
+        # DEBUG — remove after working
+        st.caption(f"Password source: {get_user_password()[:3]}***")
 
         if st.button("Sign In", type="primary", use_container_width=True):
             if password == get_admin_password():
