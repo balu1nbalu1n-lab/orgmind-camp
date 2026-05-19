@@ -29,16 +29,18 @@ FOLDER_MAP = {
 
 
 def get_dropbox_client():
+    """Get token from env var (Railway) or Streamlit secrets."""
     token = os.getenv("DROPBOX_ACCESS_TOKEN", "")
-    try:
-        import streamlit as st
-        token = st.secrets.get("DROPBOX_ACCESS_TOKEN", token)
-    except Exception:
-        pass
+    if not token:
+        try:
+            import streamlit as st
+            token = st.secrets.get("DROPBOX_ACCESS_TOKEN", "")
+        except Exception:
+            pass
     if not token or token.startswith("paste-your"):
         raise ValueError(
             "Dropbox access token not configured. "
-            "Add DROPBOX_ACCESS_TOKEN to your Streamlit secrets."
+            "Add DROPBOX_ACCESS_TOKEN to your Railway Variables."
         )
     return dropbox.Dropbox(token)
 

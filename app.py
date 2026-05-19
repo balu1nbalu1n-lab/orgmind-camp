@@ -33,6 +33,13 @@ st.markdown("""
 
 # ── SECRETS ───────────────────────────────────────────────────────────────────
 def get_secret(key, default=""):
+    """Read from environment variables first, then Streamlit secrets."""
+    import os
+    # Try environment variable first (Railway)
+    val = os.environ.get(key, "")
+    if val:
+        return val
+    # Fall back to Streamlit secrets (Streamlit Cloud)
     try:
         return st.secrets[key]
     except Exception:

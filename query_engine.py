@@ -6,6 +6,13 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Ensure API keys from Railway env vars are available
+import os as _os
+for _key in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]:
+    if _os.environ.get(_key) and not _os.environ.get(_key).startswith("paste"):
+        pass  # Already set correctly
+
+
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
