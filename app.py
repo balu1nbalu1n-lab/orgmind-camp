@@ -32,22 +32,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── SECRETS ───────────────────────────────────────────────────────────────────
-def get_secret(key, default=""):
-    """Read from environment variables first, then Streamlit secrets."""
-    import os
-    # Try environment variable first (Railway)
-    val = os.environ.get(key, "")
-    if val:
-        return val
-    # Fall back to Streamlit secrets (Streamlit Cloud)
-    try:
-        return st.secrets[key]
-    except Exception:
-        return default
+import os as _os
 
-USER_PASSWORD  = get_secret("USER_PASSWORD",  "camp2026")
-LEGAL_PASSWORD = get_secret("LEGAL_PASSWORD", "camplegal2026")
-ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD", "campadmin2026")
+USER_PASSWORD  = _os.environ.get("USER_PASSWORD",  "camp2026")
+LEGAL_PASSWORD = _os.environ.get("LEGAL_PASSWORD", "camplegal2026")
+ADMIN_PASSWORD = _os.environ.get("ADMIN_PASSWORD", "campadmin2026")
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for key, val in [
