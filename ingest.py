@@ -1,33 +1,12 @@
 """
-OrgMind @ SMART — Document Ingestion v4.1
-Matches exact Dropbox folder structure.
+OrgMind @ SMART — Document Ingestion v4.2
+Clean environment variable reading.
 """
 
-import os, sys
+import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
-
-import os as _os
-
-# Read API keys from all possible sources before any other imports
-def _bootstrap_keys():
-    paths = ["/tmp/apikeys.txt", "/app/config.txt",
-             "./config.txt", "/mount/src/orgmind-camp/config.txt"]
-    for path in paths:
-        if _os.path.exists(path):
-            try:
-                with open(path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if "=" in line and not line.startswith("#"):
-                            k, v = line.split("=", 1)
-                            k, v = k.strip(), v.strip()
-                            if v and not v.startswith("replace_with"):
-                                _os.environ.setdefault(k, v)
-            except Exception:
-                pass
-
-_bootstrap_keys()
 
 import fitz
 from docx import Document as Docx
@@ -62,8 +41,6 @@ DEPT_CONFIG = {
         "label": "Research Operations",
         "folders": [
             "camp_documents/03_Research_Operations/Reports",
-            "camp_documents/03_Research_Operations/Lab-Inventory",
-            "camp_documents/03_Research_Operations/Equipment",
             "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
             "camp_documents/03_Research_Operations",
         ]
@@ -83,18 +60,20 @@ def read_pdf(path):
     doc.close()
     return text
 
+
 def read_docx(path):
     doc = Docx(path)
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
 
 def load_folder(folder_path, collection_name, seen_files):
     docs = []
     if not os.path.exists(folder_path):
         return docs
     for fname in sorted(os.listdir(folder_path)):
-        if not fname.lower().endswith((".pdf",".docx")):
+        if not fname.lower().endswith((".pdf", ".docx")):
             continue
-        if fname.startswith(("~",".")):
+        if fname.startswith(("~", ".")):
             continue
         fpath = os.path.join(folder_path, fname)
         if fpath in seen_files:
@@ -108,7 +87,7 @@ def load_folder(folder_path, collection_name, seen_files):
                 continue
             fname_upper = fname.upper()
             doc_type = "GENERAL"
-            for t in ["RCA","NDA","MTA","LOA"]:
+            for t in ["RCA", "NDA", "MTA", "LOA"]:
                 if t in fname_upper:
                     doc_type = t
                     break
@@ -130,12 +109,12 @@ def run_ingest():
     try:
         embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     except Exception as e:
-        return {"success":False,"error":str(e),
-                "total_docs":0,"total_chunks":0,"details":{}}
+        return {"success": False, "error": str(e),
+                "total_docs": 0, "total_chunks": 0, "details": {}}
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000, chunk_overlap=200,
-        separators=["\n\n","\n",". "," "]
+        separators=["\n\n", "\n", ". ", " "]
     )
 
     total_docs = total_chunks = 0
@@ -146,10 +125,11 @@ def run_ingest():
         seen_files = set()
         all_docs = []
         for folder in config["folders"]:
-            all_docs.extend(load_folder(folder, collection_name, seen_files))
+            all_docs.extend(
+                load_folder(folder, collection_name, seen_files))
 
         if not all_docs:
-            details[label] = {"docs":0,"chunks":0}
+            details[label] = {"docs": 0, "chunks": 0}
             continue
 
         chunks = splitter.split_documents(all_docs)
@@ -160,17 +140,18 @@ def run_ingest():
                 collection_name=collection_name,
                 persist_directory=CHROMA_PATH
             )
-            details[label] = {"docs":len(all_docs),"chunks":len(chunks)}
+            details[label] = {
+                "docs": len(all_docs), "chunks": len(chunks)}
             total_docs += len(all_docs)
             total_chunks += len(chunks)
         except Exception as e:
-            details[label] = {"docs":0,"chunks":0,"error":str(e)}
+            details[label] = {"docs": 0, "chunks": 0, "error": str(e)}
 
     return {
-        "success":True,
-        "total_docs":total_docs,
-        "total_chunks":total_chunks,
-        "details":details
+        "success": True,
+        "total_docs": total_docs,
+        "total_chunks": total_chunks,
+        "details": details
     }
 
 
@@ -187,4 +168,4 @@ if __name__ == "__main__":
                 print(f"\n[{label}] {info['docs']} docs → {info['chunks']} chunks")
         print(f"\n  Done! {result['total_docs']} documents")
         print(f"        {result['total_chunks']} searchable chunks")
-    print("="*56+"\n")
+    print("="*56 + "\n")

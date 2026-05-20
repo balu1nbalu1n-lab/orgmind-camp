@@ -1,63 +1,11 @@
 """
-OrgMind @ SMART — CAMP Query Engine v4.1
+OrgMind @ SMART — CAMP Query Engine v4.2
+Clean environment variable reading — no config.txt needed.
 """
 
 import os
 from dotenv import load_dotenv
 load_dotenv()
-
-import os as _os
-
-# Bootstrap all keys from config files before any imports
-def _bootstrap():
-    paths = ["/tmp/apikeys.txt", "/app/config.txt",
-             "./config.txt", "/mount/src/orgmind-camp/config.txt"]
-    for path in paths:
-        if _os.path.exists(path):
-            try:
-                with open(path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if "=" in line and not line.startswith("#"):
-                            k, v = line.split("=", 1)
-                            k, v = k.strip(), v.strip()
-                            if v and not v.startswith("replace_with"):
-                                _os.environ.setdefault(k, v)
-            except Exception:
-                pass
-
-_bootstrap()
-
-def _read_config(key):
-    """Read from config.txt, /tmp/apikeys.txt, or environment."""
-    # Search all possible config locations
-    config_paths = [
-        "/tmp/apikeys.txt",          # Written by Railway startup command
-        "/app/config.txt",           # Railway app folder
-        "./config.txt",              # Local development
-        "/mount/src/orgmind-camp/config.txt"  # Streamlit Cloud
-    ]
-    for path in config_paths:
-        if _os.path.exists(path):
-            try:
-                with open(path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith(key + "="):
-                            val = line.split("=", 1)[1].strip()
-                            if val and not val.startswith("replace_with"):
-                                return val
-            except Exception:
-                pass
-    # Final fallback to environment variable
-    return _os.environ.get(key, "")
-
-# Load API keys into environment
-for _key in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]:
-    _val = _read_config(_key)
-    if _val:
-        _os.environ[_key] = _val
-
 
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import OpenAIEmbeddings
@@ -66,8 +14,13 @@ from langchain_core.prompts import ChatPromptTemplate
 
 CHROMA_PATH = "./chroma_db"
 
-# Collections available per access level
-# legal_unlocked=True means user has entered the legal password
+def get_folder_options(legal_unlocked=False):
+    base = ["Staff Related", "Research Operations",
+            "General CAMP", "All (Search Everything)"]
+    if legal_unlocked:
+        return ["Legal & Contracts"] + base
+    return base
+
 def get_collections(department, legal_unlocked=False):
     base = {
         "Legal & Contracts":      ["camp_legal",       "camp_general"],
@@ -76,7 +29,6 @@ def get_collections(department, legal_unlocked=False):
         "General CAMP":           ["camp_general"],
         "All (Search Everything)":["camp_staff", "camp_research_ops", "camp_general"],
     }
-    # Add legal to All only if unlocked
     if legal_unlocked:
         base["All (Search Everything)"] = [
             "camp_legal", "camp_staff",
@@ -84,13 +36,13 @@ def get_collections(department, legal_unlocked=False):
         ]
     return base.get(department, base["All (Search Everything)"])
 
-# Folder dropdown options per access level
-def get_folder_options(legal_unlocked=False):
-    base = ["Staff Related", "Research Operations",
-            "General CAMP", "All (Search Everything)"]
-    if legal_unlocked:
-        return ["Legal & Contracts"] + base
-    return base
+CAMP_COLLECTIONS = {
+    "Legal & Contracts":      ["camp_legal",       "camp_general"],
+    "Staff Related":          ["camp_staff",        "camp_general"],
+    "Research Operations":    ["camp_research_ops", "camp_general"],
+    "General CAMP":           ["camp_general"],
+    "All (Search Everything)":["camp_staff", "camp_research_ops", "camp_general"],
+}
 
 AGREEMENT_TYPE_KEYWORDS = {
     "RCA": ["RCA", "Research Collaboration"],
@@ -151,7 +103,7 @@ def query(question, department="All (Search Everything)",
                     filtered = [
                         d for d in docs if any(
                             kw.upper() in
-                            d.metadata.get("source","").upper()
+                            d.metadata.get("source", "").upper()
                             for kw in keywords)
                     ]
                     docs = filtered if filtered else docs
@@ -170,7 +122,7 @@ def query(question, department="All (Search Everything)",
         }
 
     context = "\n\n---\n\n".join(
-        f"[Source: {d.metadata.get('source','unknown')}]\n{d.page_content}"
+        f"[Source: {d.metadata.get('source', 'unknown')}]\n{d.page_content}"
         for d in all_docs
     )
 
@@ -189,6 +141,6 @@ def query(question, department="All (Search Everything)",
     return {
         "answer": response.content,
         "sources": list(set(
-            d.metadata.get("source","") for d in all_docs)),
+            d.metadata.get("source", "") for d in all_docs)),
         "chunks_used": len(all_docs)
     }

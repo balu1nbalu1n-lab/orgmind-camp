@@ -1,48 +1,12 @@
 """
-OrgMind @ SMART — CAMP URL Platform v4.1
-Three-tier access: User / Legal / Admin
+OrgMind @ SMART — CAMP URL Platform v4.2
+Clean environment variable reading for Render deployment.
 """
 
-# ── BOOTSTRAP API KEYS ────────────────────────────────────────────────────────
-# Must happen before ANY other import that uses API keys
-import os as _boot_os
-
-def _bootstrap_all_keys():
-    import base64 as _b64
-    paths = [
-        "/tmp/apikeys.txt",
-        "/app/config.txt",
-        "./config.txt",
-        "/mount/src/orgmind-camp/config.txt"
-    ]
-    for path in paths:
-        if _boot_os.path.exists(path):
-            try:
-                with open(path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if "=" in line and not line.startswith("#"):
-                            k, v = line.split("=", 1)
-                            k, v = k.strip(), v.strip()
-                            if not v or v.startswith("replace_with") or v.startswith("paste"):
-                                continue
-                            # Decode base64-encoded values (prefixed with b64:)
-                            if v.startswith("b64:"):
-                                try:
-                                    v = _b64.b64decode(v[4:]).decode("utf-8")
-                                except Exception:
-                                    continue
-                            _boot_os.environ[k] = v
-            except Exception:
-                pass
-
-_bootstrap_all_keys()
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 import streamlit as st
-import tempfile, os
-from query_engine import query, get_folder_options, get_collections
+import tempfile
+import os
+from query_engine import query, get_folder_options, get_collections, CAMP_COLLECTIONS
 
 st.set_page_config(
     page_title="OrgMind — CAMP @ SMART",
@@ -68,38 +32,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── SECRETS ───────────────────────────────────────────────────────────────────
-import os as _os
-
-def _read_config(key, default):
-    """Read from config.txt file — most reliable on Railway."""
-    try:
-        config_paths = [
-            "/app/config.txt",
-            "./config.txt",
-            "/mount/src/orgmind-camp/config.txt"
-        ]
-        for path in config_paths:
-            if _os.path.exists(path):
-                with open(path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith(key + "="):
-                            return line.split("=", 1)[1].strip()
-    except Exception:
-        pass
-    # Fallback to env var
-    val = _os.environ.get(key, default)
-    return val
-
-def get_user_password():
-    return _read_config("USER_PASSWORD", "camp2026")
-
-def get_legal_password():
-    return _read_config("LEGAL_PASSWORD", "camplegal2026")
-
-def get_admin_password():
-    return _read_config("ADMIN_PASSWORD", "campadmin2026")
+# ── PASSWORDS — read from environment variables ───────────────────────────────
+USER_PASSWORD  = os.environ.get("USER_PASSWORD",  "camp2026")
+LEGAL_PASSWORD = os.environ.get("LEGAL_PASSWORD", "camplegal2026")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "campadmin2026")
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for key, val in [
@@ -112,31 +48,33 @@ for key, val in [
 
 # ── LOGIN SCREEN ──────────────────────────────────────────────────────────────
 if not st.session_state["authenticated"]:
-    st.markdown('<p class="main-title">🧠 OrgMind @ SMART</p>', unsafe_allow_html=True)
-    st.markdown('<p class="camp-badge">CAMP — Critical Analytics for Manufacturing Personalised Medicine</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">🧠 OrgMind @ SMART</p>',
+                unsafe_allow_html=True)
+    st.markdown('<p class="camp-badge">CAMP — Critical Analytics for Manufacturing Personalised Medicine</p>',
+                unsafe_allow_html=True)
     st.markdown("---")
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("### Sign In")
         password = st.text_input("Password:", type="password",
                                   placeholder="Enter your access password")
         if st.button("Sign In", type="primary", use_container_width=True):
-            if password == get_admin_password():
+            if password == ADMIN_PASSWORD:
                 st.session_state.update({
-                    "authenticated":True, "is_admin":True,
-                    "legal_unlocked":True
+                    "authenticated": True, "is_admin": True,
+                    "legal_unlocked": True
                 })
                 st.rerun()
-            elif password == get_legal_password():
+            elif password == LEGAL_PASSWORD:
                 st.session_state.update({
-                    "authenticated":True, "is_admin":False,
-                    "legal_unlocked":True
+                    "authenticated": True, "is_admin": False,
+                    "legal_unlocked": True
                 })
                 st.rerun()
-            elif password == get_user_password():
+            elif password == USER_PASSWORD:
                 st.session_state.update({
-                    "authenticated":True, "is_admin":False,
-                    "legal_unlocked":False
+                    "authenticated": True, "is_admin": False,
+                    "legal_unlocked": False
                 })
                 st.rerun()
             else:
@@ -169,12 +107,11 @@ def build_exception_prompt(doc_type, combined_context):
 - Overhead: check if 15% applies
 - IP ownership: grantor rights to research IP
 - Reporting: note all deadlines and audit rights""",
-    }.get(doc_type.upper(),
-          "Apply CAMP/SMART standard institutional positions.")
+    }.get(doc_type.upper(), "Apply CAMP/SMART standard positions.")
 
     return f"""
 You are analysing a complete {doc_type} for CAMP @ SMART.
-Document in three sections (A, B, C) — this is the COMPLETE agreement.
+Document in three sections (A, B, C) — COMPLETE agreement.
 Read ALL THREE. Do NOT say it is incomplete.
 Produce ONE unified exception report using spirit-based analysis.
 
@@ -208,11 +145,12 @@ COMPLETE DOCUMENT:
 """
 
 # ── MAIN HEADER ───────────────────────────────────────────────────────────────
-col_title, col_folder = st.columns([3,1])
+col_title, col_folder = st.columns([3, 1])
 with col_title:
-    st.markdown('<p class="main-title">🧠 OrgMind @ SMART</p>', unsafe_allow_html=True)
-    st.markdown('<p class="camp-badge">CAMP — Critical Analytics for Manufacturing Personalised Medicine</p>', unsafe_allow_html=True)
-    # Show access level badge
+    st.markdown('<p class="main-title">🧠 OrgMind @ SMART</p>',
+                unsafe_allow_html=True)
+    st.markdown('<p class="camp-badge">CAMP — Critical Analytics for Manufacturing Personalised Medicine</p>',
+                unsafe_allow_html=True)
     if st.session_state["is_admin"]:
         badge = "🔑 Administrator"
     elif st.session_state["legal_unlocked"]:
@@ -220,7 +158,8 @@ with col_title:
     else:
         badge = "👤 Staff Access"
     st.markdown(
-        f'<p class="sub-title">Institutional Memory &nbsp;|&nbsp; '        f'<span class="legal-badge">{badge}</span></p>',
+        f'<p class="sub-title">Institutional Memory &nbsp;|&nbsp; '
+        f'<span class="legal-badge">{badge}</span></p>',
         unsafe_allow_html=True)
 
 with col_folder:
@@ -228,7 +167,7 @@ with col_folder:
     folder_options = get_folder_options(st.session_state["legal_unlocked"])
     selected_folder = st.selectbox("Folder:", folder_options, index=0)
 
-# ── LEGAL UNLOCK WIDGET (for non-admin users who need legal access) ───────────
+# ── LEGAL UNLOCK ──────────────────────────────────────────────────────────────
 if (not st.session_state["is_admin"]
         and not st.session_state["legal_unlocked"]):
     with st.expander("🔒 Have Legal & Contracts access? Unlock here"):
@@ -247,25 +186,22 @@ st.markdown("---")
 # ── TABS ──────────────────────────────────────────────────────────────────────
 legal_unlocked = st.session_state["legal_unlocked"]
 is_admin = st.session_state["is_admin"]
-
-is_legal_folder = selected_folder == "Legal & Contracts"
-is_staff_folder = selected_folder == "Staff Related"
+is_staff = selected_folder == "Staff Related"
+is_legal = selected_folder == "Legal & Contracts"
 
 if is_admin:
-    if is_staff_folder:
+    if is_staff:
         tab1, tab_admin = st.tabs(["💬  Ask OrgMind", "⚙️  Admin"])
         tab2 = None
-    elif is_legal_folder:
-        tab1, tab2, tab_admin = st.tabs([
-            "💬  Ask OrgMind", "📋  Exception Analyser", "⚙️  Admin"])
     else:
         tab1, tab2, tab_admin = st.tabs([
             "💬  Ask OrgMind", "📋  Exception Analyser", "⚙️  Admin"])
 else:
     tab_admin = None
-    if is_staff_folder:
+    if is_staff:
         tabs = st.tabs(["💬  Ask OrgMind"])
-        tab1 = tabs[0]; tab2 = None
+        tab1 = tabs[0]
+        tab2 = None
     else:
         tab1, tab2 = st.tabs(["💬  Ask OrgMind", "📋  Exception Analyser"])
 
@@ -275,7 +211,7 @@ with tab1:
         "Legal & Contracts":
             "Ask about any clause, term or precedent from CAMP's signed "
             "agreements — RCAs, NDAs, MTAs, LOAs, Sub-Contracts or "
-            "pre-agreement email discussions in Miscellaneous.",
+            "pre-agreement discussions in Miscellaneous.",
         "Staff Related":
             "Ask about any SMART policy — leave, travel, claims, "
             "onboarding, training or HR procedures.",
@@ -289,18 +225,18 @@ with tab1:
             "Searches across all accessible CAMP folders simultaneously.",
     }
     st.markdown(
-        f'<div class="hint-box">💡 {hints.get(selected_folder,"Ask OrgMind anything about CAMP.")}</div>',
+        f'<div class="hint-box">💡 {hints.get(selected_folder, "Ask OrgMind anything about CAMP.")}</div>',
         unsafe_allow_html=True)
 
     query_text = st.text_area(
         "Your question:",
-        value=st.session_state.get("query_text",""),
+        value=st.session_state.get("query_text", ""),
         height=100,
         key=f'qbox_{st.session_state["clear_count"]}',
         placeholder="Type your question here in your own words..."
     )
 
-    s_col, c_col = st.columns([5,1])
+    s_col, c_col = st.columns([5, 1])
     with s_col:
         search_clicked = st.button("🔍  Search CAMP Knowledge Base",
                                     type="primary", use_container_width=True)
@@ -327,7 +263,7 @@ with tab1:
             html = " ".join(
                 f'<span class="source-tag">{s}</span>' for s in unique)
             st.markdown(html, unsafe_allow_html=True)
-        fb1, fb2, _ = st.columns([1,1,5])
+        fb1, fb2, _ = st.columns([1, 1, 5])
         fb1.button("👍  Helpful", key="fb_yes")
         fb2.button("👎  Not helpful", key="fb_no")
     elif search_clicked:
@@ -340,17 +276,17 @@ if tab2 is not None:
         st.markdown(
             "Upload a new incoming agreement. OrgMind auto-detects the "
             "document type from the filename and compares it against "
-            "CAMP's established practice for that document type."
+            "CAMP's established practice."
         )
         st.info("Include document type in filename: e.g. `2026-05_RCA_NewCollaborator_Draft.pdf`")
         st.markdown("---")
 
-        uploaded = st.file_uploader("Upload document:", type=["pdf","docx"])
+        uploaded = st.file_uploader("Upload document:", type=["pdf", "docx"])
 
         if uploaded:
             fname_upper = uploaded.name.upper()
             detected = "RCA"
-            for t in ["NDA","MTA","LOA","RCA"]:
+            for t in ["NDA", "MTA", "LOA", "RCA"]:
                 if t in fname_upper:
                     detected = t
                     break
@@ -358,8 +294,8 @@ if tab2 is not None:
             st.success(f"✅  {uploaded.name}  ({uploaded.size:,} bytes)")
             doc_type = st.selectbox(
                 "Document type:",
-                ["RCA","NDA","MTA","LOA"],
-                index=["RCA","NDA","MTA","LOA"].index(detected)
+                ["RCA", "NDA", "MTA", "LOA"],
+                index=["RCA", "NDA", "MTA", "LOA"].index(detected)
             )
 
             if st.button("📋  Run Exception Analysis", type="primary"):
@@ -367,6 +303,7 @@ if tab2 is not None:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(uploaded.getvalue())
                     tmp_path = tmp.name
+
                 try:
                     if suffix == ".pdf":
                         import fitz
@@ -379,7 +316,8 @@ if tab2 is not None:
                         full_text = "\n".join(
                             p.text for p in d.paragraphs if p.text.strip())
                 except Exception as e:
-                    st.error(f"Could not read: {e}"); st.stop()
+                    st.error(f"Could not read: {e}")
+                    st.stop()
                 finally:
                     os.unlink(tmp_path)
 
@@ -387,12 +325,14 @@ if tab2 is not None:
                     st.error("Cannot extract text — ensure PDF is not scanned.")
                     st.stop()
 
-                t = len(full_text); third = t // 3
+                t = len(full_text)
+                third = t // 3
                 combined = (
                     f"[SECTION A]\n{full_text[:third]}\n\n"
                     f"[SECTION B]\n{full_text[third:2*third]}\n\n"
                     f"[SECTION C]\n{full_text[2*third:]}"
                 )
+
                 with st.spinner(f"Analysing {doc_type}... 30-60 seconds."):
                     result = query(
                         build_exception_prompt(doc_type, combined),
@@ -400,20 +340,25 @@ if tab2 is not None:
                         doc_type_filter=doc_type,
                         legal_unlocked=True
                     )
+
                 st.markdown("---")
                 st.markdown(f"## Exception Report — {doc_type}")
                 st.markdown(f"`{uploaded.name}`")
                 st.markdown("---")
                 st.markdown(result["answer"])
+
                 if result["sources"]:
                     html = " ".join(
                         f'<span class="source-tag">{s}</span>'
                         for s in sorted(set(s for s in result["sources"] if s)))
                     st.markdown(html, unsafe_allow_html=True)
+
                 st.download_button(
                     "📥  Download Report",
                     data=f"EXCEPTION REPORT — {doc_type}\nDocument: {uploaded.name}\n{'='*60}\n\n{result['answer']}",
-                    file_name=uploaded.name.replace(".pdf",f"_{doc_type}_ExceptionReport.txt").replace(".docx",f"_{doc_type}_ExceptionReport.txt"),
+                    file_name=uploaded.name.replace(
+                        ".pdf", f"_{doc_type}_ExceptionReport.txt"
+                    ).replace(".docx", f"_{doc_type}_ExceptionReport.txt"),
                     use_container_width=True
                 )
 
@@ -423,25 +368,24 @@ if tab_admin is not None:
         st.markdown("## ⚙️ Admin Panel")
         st.info("Only visible to administrators.")
 
-        # ── 1. Sync ────────────────────────────────────────────────────────
+        # ── 1. Sync ───────────────────────────────────────────────────────
         st.markdown("### 1.  Sync Documents from Dropbox")
-        st.markdown(
-            "Downloads new or updated files from your Dropbox "
-            "**OrgMind-CAMP** folder. Run after any change in Dropbox."
-        )
-        col1, col2 = st.columns([2,1])
+        st.markdown("Downloads new or updated files from Dropbox. Run after any change.")
+
+        col1, col2 = st.columns([2, 1])
         with col1:
             if st.button("🔄  Sync from Dropbox", use_container_width=True):
                 from dropbox_sync import sync_from_dropbox
                 with st.spinner("Syncing from Dropbox..."):
                     synced, skipped, errors = sync_from_dropbox()
-                for e in errors: st.warning(e)
+                for e in errors:
+                    st.warning(e)
                 st.success(
                     f"Sync complete: **{synced} new files** downloaded, "
                     f"{skipped} already up to date."
                 )
                 if synced > 0:
-                    st.info("New files synced — run Rebuild Knowledge Base below.")
+                    st.info("Run Rebuild Knowledge Base below.")
         with col2:
             if st.button("👁  View Dropbox Files", use_container_width=True):
                 from dropbox_sync import get_dropbox_file_list
@@ -457,51 +401,13 @@ if tab_admin is not None:
 
         st.markdown("---")
 
-        # ── 2. Rebuild ─────────────────────────────────────────────────────
+        # ── 2. Rebuild ────────────────────────────────────────────────────
         st.markdown("### 2.  Rebuild Knowledge Base")
         st.markdown("Run after every Sync. Makes all new documents searchable.")
         st.warning("Takes 2-5 minutes. Users can still query during rebuild.")
 
         if st.button("⚡  Rebuild Knowledge Base",
                      type="primary", use_container_width=True):
-            import os as _dbg, base64 as _b64, subprocess as _sub
-
-            # Force-set API keys before any import
-            cfg_content = ""
-            for _p in ["/app/config.txt", "./config.txt",
-                        "/mount/src/orgmind-camp/config.txt"]:
-                if _dbg.path.exists(_p):
-                    with open(_p) as _f:
-                        cfg_content = _f.read()
-                    st.caption(f"Config found: {_p}")
-                    break
-
-            if not cfg_content:
-                st.error("config.txt not found — cannot rebuild.")
-                st.stop()
-
-            # Decode and set all keys NOW before any import
-            keys_set = []
-            for line in cfg_content.split("\n"):
-                line = line.strip()
-                if "=" not in line or line.startswith("#"):
-                    continue
-                k, v = line.split("=", 1)
-                k, v = k.strip(), v.strip()
-                if not v or v.startswith("replace_with"):
-                    continue
-                if v.startswith("b64:"):
-                    try:
-                        v = _b64.b64decode(v[4:]).decode("utf-8")
-                    except Exception:
-                        continue
-                _dbg.environ[k] = v
-                keys_set.append(k)
-
-            st.caption(f"Keys loaded: {keys_set}")
-            oai = _dbg.environ.get("OPENAI_API_KEY","NOT SET")
-            st.caption(f"OPENAI_API_KEY: {oai[:12]}...")
-
             from ingest import run_ingest
             with st.spinner("Building knowledge base... please wait."):
                 result = run_ingest()
@@ -513,22 +419,18 @@ if tab_admin is not None:
                     f"{result['total_chunks']} searchable chunks"
                 )
                 for label, info in result["details"].items():
-                    icon = "✅" if info.get("docs",0) > 0 else "⏳"
-                    docs = info.get("docs",0)
-                    chunks = info.get("chunks",0)
+                    icon = "✅" if info.get("docs", 0) > 0 else "⏳"
                     st.markdown(
                         f"&nbsp;&nbsp;{icon}  {label}: "
-                        f"{docs} docs, {chunks} chunks"
+                        f"{info.get('docs',0)} docs, {info.get('chunks',0)} chunks"
                     )
 
         st.markdown("---")
 
-        # ── 3. Delete a document ────────────────────────────────────────────
-        st.markdown("### 3.  Delete a Document from Knowledge Base")
-        st.markdown(
-            "If you delete a file from Dropbox, also remove it here "
-            "then Rebuild. Otherwise OrgMind will still reference it."
-        )
+        # ── 3. Delete ─────────────────────────────────────────────────────
+        st.markdown("### 3.  Delete a Document")
+        st.markdown("Delete a file locally then Rebuild to remove from search index.")
+
         from dropbox_sync import get_local_file_list
         local_files = get_local_file_list()
         all_files = []
@@ -540,14 +442,13 @@ if tab_admin is not None:
             file_to_delete = st.selectbox(
                 "Select file to delete:", ["— select —"] + all_files)
             if file_to_delete != "— select —":
-                if st.button("🗑  Delete Selected File",
-                             type="secondary", use_container_width=False):
+                if st.button("🗑  Delete Selected File"):
                     from dropbox_sync import delete_local_file
                     ok, err = delete_local_file(file_to_delete)
                     if ok:
                         st.success(
                             f"Deleted: {os.path.basename(file_to_delete)}. "
-                            "Run Rebuild Knowledge Base to update search index."
+                            "Run Rebuild to update search index."
                         )
                     else:
                         st.error(f"Could not delete: {err}")
@@ -556,7 +457,7 @@ if tab_admin is not None:
 
         st.markdown("---")
 
-        # ── 4. Knowledge Base Status ────────────────────────────────────────
+        # ── 4. Status ─────────────────────────────────────────────────────
         st.markdown("### 4.  Knowledge Base Status")
         if os.path.exists("./chroma_db"):
             try:
@@ -564,10 +465,10 @@ if tab_admin is not None:
                 from langchain_chroma import Chroma as ChromaDB
                 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
                 for coll, label in [
-                    ("camp_legal","Legal & Contracts"),
-                    ("camp_staff","Staff Related"),
-                    ("camp_research_ops","Research Operations"),
-                    ("camp_general","General CAMP")
+                    ("camp_legal", "Legal & Contracts"),
+                    ("camp_staff", "Staff Related"),
+                    ("camp_research_ops", "Research Operations"),
+                    ("camp_general", "General CAMP")
                 ]:
                     try:
                         vs = ChromaDB(
@@ -576,57 +477,51 @@ if tab_admin is not None:
                             embedding_function=embeddings
                         )
                         count = vs._collection.count()
-                        st.markdown(
-                            f"&nbsp;&nbsp;📚  {label}: **{count} chunks**")
+                        st.markdown(f"&nbsp;&nbsp;📚  {label}: **{count} chunks**")
                     except Exception:
                         st.markdown(f"&nbsp;&nbsp;⏳  {label}: not loaded")
             except Exception:
-                st.info("Connect API keys to check status.")
+                st.info("API keys needed to check status.")
         else:
             st.warning("Knowledge base not built yet.")
 
         st.markdown("---")
 
-        # ── 5. Document Management Guide ────────────────────────────────────
+        # ── 5. Document Management ────────────────────────────────────────
         st.markdown("### 5.  Document Management")
         st.markdown("""
 Manage all documents in your **Dropbox** app or at dropbox.com.
 
-**OrgMind-CAMP folder structure:**
 ```
 OrgMind-CAMP/
 ├── 01_Legal_Contracts/
-│   ├── RCA/            ← Signed Research Collaboration Agreements
+│   ├── RCA/            ← Signed RCAs
 │   ├── NDA/            ← Non-Disclosure Agreements
 │   ├── MTA/            ← Material Transfer Agreements
 │   ├── LOA/            ← Letters of Award
-│   ├── Miscellaneous/  ← Pre-agreement emails, rationale discussions
-│   └── Sub-Contracts/  ← Sub-contractor agreements
+│   ├── Miscellaneous/  ← Pre-agreement emails, rationale
+│   └── Sub-Contracts/
 ├── 02_Staff_Related/
-│   └── SMART-Policies/ ← HR and operational policies
+│   └── SMART-Policies/
 ├── 03_Research_Operations/
 │   ├── Reports/
-│   ├── Lab-Inventory/
-│   ├── Equipment/
 │   └── Research-Publications-Presentations-Discussions/
 └── 04_General_CAMP/
 ```
 
-**After any change in Dropbox:**
-1. Admin tab → Sync from Dropbox
-2. Admin tab → Rebuild Knowledge Base
+**After any change in Dropbox:** Sync → Rebuild
         """)
 
         st.markdown("---")
         if st.button("🔒  Sign Out"):
-            for key in ["authenticated","is_admin","legal_unlocked"]:
+            for key in ["authenticated", "is_admin", "legal_unlocked"]:
                 st.session_state[key] = False
             st.rerun()
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### OrgMind @ SMART")
-    st.markdown("**CAMP**  ·  v4.1")
+    st.markdown("**CAMP**  ·  v4.2")
     if is_admin:
         st.markdown("🔑  Administrator")
     elif legal_unlocked:
@@ -640,22 +535,22 @@ with st.sidebar:
     else:
         st.warning("Not built yet")
     st.markdown("---")
-    st.markdown("**Folders you can access:**")
+    st.markdown("**Your folders:**")
     for f in get_folder_options(legal_unlocked):
         icons = {
-            "Legal & Contracts":"⚖️",
-            "Staff Related":"👥",
-            "Research Operations":"🔬",
-            "General CAMP":"📋",
-            "All (Search Everything)":"🔍"
+            "Legal & Contracts": "⚖️",
+            "Staff Related": "👥",
+            "Research Operations": "🔬",
+            "General CAMP": "📋",
+            "All (Search Everything)": "🔍"
         }
         st.markdown(f"{icons.get(f,'📁')}  {f}")
     st.markdown("---")
     st.markdown("**Tips:**")
-    st.markdown("Be specific. Include document type and context in your question.")
+    st.markdown("Be specific. Include document type and context.")
     st.markdown("---")
     if st.button("Sign Out", use_container_width=True):
-        for key in ["authenticated","is_admin","legal_unlocked"]:
+        for key in ["authenticated", "is_admin", "legal_unlocked"]:
             st.session_state[key] = False
         st.rerun()
     st.caption(
