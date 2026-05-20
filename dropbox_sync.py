@@ -8,22 +8,18 @@ import dropbox
 
 DROPBOX_BASE = "/OrgMind-CAMP"
 
+# FOLDER_MAP matches your exact Dropbox structure
+# Add or remove entries here if you add new subfolders in Dropbox
 FOLDER_MAP = {
-    # Legal & Contracts — all subfolders
     f"{DROPBOX_BASE}/01_Legal_Contracts/RCA":           "camp_documents/01_Legal_Contracts/RCA",
     f"{DROPBOX_BASE}/01_Legal_Contracts/NDA":           "camp_documents/01_Legal_Contracts/NDA",
     f"{DROPBOX_BASE}/01_Legal_Contracts/MTA":           "camp_documents/01_Legal_Contracts/MTA",
     f"{DROPBOX_BASE}/01_Legal_Contracts/LOA":           "camp_documents/01_Legal_Contracts/LOA",
     f"{DROPBOX_BASE}/01_Legal_Contracts/Miscellaneous": "camp_documents/01_Legal_Contracts/Miscellaneous",
     f"{DROPBOX_BASE}/01_Legal_Contracts/Sub-Contracts": "camp_documents/01_Legal_Contracts/Sub-Contracts",
-    # Staff Related
     f"{DROPBOX_BASE}/02_Staff_Related/SMART-Policies":  "camp_documents/02_Staff_Related/SMART-Policies",
-    # Research Operations
-    f"{DROPBOX_BASE}/03_Research_Operations/Reports":                               "camp_documents/03_Research_Operations/Reports",
-    f"{DROPBOX_BASE}/03_Research_Operations/Lab-Inventory":                         "camp_documents/03_Research_Operations/Lab-Inventory",
-    f"{DROPBOX_BASE}/03_Research_Operations/Equipment":                             "camp_documents/03_Research_Operations/Equipment",
+    f"{DROPBOX_BASE}/03_Research_Operations/Reports":   "camp_documents/03_Research_Operations/Reports",
     f"{DROPBOX_BASE}/03_Research_Operations/Research-Publications-Presentations-Discussions": "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
-    # General CAMP
     f"{DROPBOX_BASE}/04_General_CAMP":                  "camp_documents/04_General_CAMP",
 }
 

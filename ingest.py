@@ -7,6 +7,28 @@ import os, sys
 from dotenv import load_dotenv
 load_dotenv()
 
+import os as _os
+
+# Read API keys from all possible sources before any other imports
+def _bootstrap_keys():
+    paths = ["/tmp/apikeys.txt", "/app/config.txt",
+             "./config.txt", "/mount/src/orgmind-camp/config.txt"]
+    for path in paths:
+        if _os.path.exists(path):
+            try:
+                with open(path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if "=" in line and not line.startswith("#"):
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip()
+                            if v and not v.startswith("replace_with"):
+                                _os.environ.setdefault(k, v)
+            except Exception:
+                pass
+
+_bootstrap_keys()
+
 import fitz
 from docx import Document as Docx
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -26,12 +48,14 @@ DEPT_CONFIG = {
             "camp_documents/01_Legal_Contracts/LOA",
             "camp_documents/01_Legal_Contracts/Miscellaneous",
             "camp_documents/01_Legal_Contracts/Sub-Contracts",
+            "camp_documents/01_Legal_Contracts",
         ]
     },
     "camp_staff": {
         "label": "Staff Related",
         "folders": [
             "camp_documents/02_Staff_Related/SMART-Policies",
+            "camp_documents/02_Staff_Related",
         ]
     },
     "camp_research_ops": {
@@ -41,6 +65,7 @@ DEPT_CONFIG = {
             "camp_documents/03_Research_Operations/Lab-Inventory",
             "camp_documents/03_Research_Operations/Equipment",
             "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
+            "camp_documents/03_Research_Operations",
         ]
     },
     "camp_general": {

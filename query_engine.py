@@ -8,6 +8,26 @@ load_dotenv()
 
 import os as _os
 
+# Bootstrap all keys from config files before any imports
+def _bootstrap():
+    paths = ["/tmp/apikeys.txt", "/app/config.txt",
+             "./config.txt", "/mount/src/orgmind-camp/config.txt"]
+    for path in paths:
+        if _os.path.exists(path):
+            try:
+                with open(path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if "=" in line and not line.startswith("#"):
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip()
+                            if v and not v.startswith("replace_with"):
+                                _os.environ.setdefault(k, v)
+            except Exception:
+                pass
+
+_bootstrap()
+
 def _read_config(key):
     """Read from config.txt, /tmp/apikeys.txt, or environment."""
     # Search all possible config locations
