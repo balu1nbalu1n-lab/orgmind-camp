@@ -399,6 +399,12 @@ if tab_admin is not None:
                         for f in files:
                             st.markdown(f"&nbsp;&nbsp;&nbsp;📄 {f}")
 
+        # Show debug log if exists
+        if os.path.exists("camp_documents/sync_debug.txt"):
+            with st.expander("🔍 Debug — Dropbox path mapping"):
+                with open("camp_documents/sync_debug.txt") as f:
+                    st.text(f.read())
+
         st.markdown("---")
 
         # ── 2. Rebuild ────────────────────────────────────────────────────

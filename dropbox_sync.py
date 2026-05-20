@@ -64,6 +64,7 @@ def sync_from_dropbox():
     except Exception as e:
         return 0, 0, [f"Cannot list Dropbox: {e}"]
 
+    debug_log = []
     for entry in entries:
         if not isinstance(entry, dropbox.files.FileMetadata):
             continue
@@ -74,6 +75,7 @@ def sync_from_dropbox():
             continue
 
         dropbox_folder = entry.path_display.rsplit("/", 1)[0]
+        debug_log.append(f"{fname} -> folder: {dropbox_folder}")
         local_path = FOLDER_MAP.get(dropbox_folder)
 
         if not local_path:
@@ -111,6 +113,13 @@ def sync_from_dropbox():
             synced += 1
         except Exception as e:
             errors.append(f"Cannot download {fname}: {e}")
+
+    # Write debug log
+    try:
+        with open("camp_documents/sync_debug.txt", "w") as f:
+            f.write("\n".join(debug_log))
+    except Exception:
+        pass
 
     return synced, skipped, errors
 
