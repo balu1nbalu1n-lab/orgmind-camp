@@ -3,6 +3,43 @@ OrgMind @ SMART — CAMP URL Platform v4.1
 Three-tier access: User / Legal / Admin
 """
 
+# ── BOOTSTRAP API KEYS ────────────────────────────────────────────────────────
+# Must happen before ANY other import that uses API keys
+import os as _boot_os
+
+def _bootstrap_all_keys():
+    import base64 as _b64
+    paths = [
+        "/tmp/apikeys.txt",
+        "/app/config.txt",
+        "./config.txt",
+        "/mount/src/orgmind-camp/config.txt"
+    ]
+    for path in paths:
+        if _boot_os.path.exists(path):
+            try:
+                with open(path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if "=" in line and not line.startswith("#"):
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip()
+                            if not v or v.startswith("replace_with") or v.startswith("paste"):
+                                continue
+                            # Decode base64-encoded values (prefixed with b64:)
+                            if v.startswith("b64:"):
+                                try:
+                                    v = _b64.b64decode(v[4:]).decode("utf-8")
+                                except Exception:
+                                    continue
+                            _boot_os.environ[k] = v
+            except Exception:
+                pass
+
+_bootstrap_all_keys()
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 import streamlit as st
 import tempfile, os
 from query_engine import query, get_folder_options, get_collections
