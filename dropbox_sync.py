@@ -29,8 +29,9 @@ FOLDER_MAP = {
 
 
 def _read_config(key):
-    """Read from config.txt or environment variable."""
+    """Read from config files or environment variable."""
     config_paths = [
+        "/tmp/apikeys.txt",
         "/app/config.txt",
         "./config.txt",
         "/mount/src/orgmind-camp/config.txt"
@@ -120,7 +121,15 @@ def sync_from_dropbox():
                     break
 
         if not local_path:
-            continue  # File is in unmapped folder — skip
+            # Try partial match — find closest parent folder
+            dropbox_folder_lower = dropbox_folder.lower()
+            for dp, lp in FOLDER_MAP.items():
+                if dropbox_folder_lower.startswith(dp.lower()):
+                    local_path = lp
+                    break
+
+        if not local_path:
+            continue  # Still no match — skip
 
         local_file = os.path.join(local_path, fname)
 

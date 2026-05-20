@@ -9,12 +9,13 @@ load_dotenv()
 import os as _os
 
 def _read_config(key):
-    """Read value from config.txt (for passwords) or environment (for API keys)."""
-    # Try config.txt first
+    """Read from config.txt, /tmp/apikeys.txt, or environment."""
+    # Search all possible config locations
     config_paths = [
-        "/app/config.txt",
-        "./config.txt",
-        "/mount/src/orgmind-camp/config.txt"
+        "/tmp/apikeys.txt",          # Written by Railway startup command
+        "/app/config.txt",           # Railway app folder
+        "./config.txt",              # Local development
+        "/mount/src/orgmind-camp/config.txt"  # Streamlit Cloud
     ]
     for path in config_paths:
         if _os.path.exists(path):
@@ -28,10 +29,10 @@ def _read_config(key):
                                 return val
             except Exception:
                 pass
-    # Fall back to environment variable
+    # Final fallback to environment variable
     return _os.environ.get(key, "")
 
-# Load API keys into environment if not already set
+# Load API keys into environment
 for _key in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]:
     _val = _read_config(_key)
     if _val:
