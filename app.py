@@ -464,34 +464,43 @@ if tab_admin is not None:
 
         if st.button("⚡  Rebuild Knowledge Base",
                      type="primary", use_container_width=True):
-            import os as _dbg, base64 as _b64
+            import os as _dbg, base64 as _b64, subprocess as _sub
 
-            # Step 1: Check config.txt exists and show raw content
-            cfg_found = False
+            # Force-set API keys before any import
             cfg_content = ""
             for _p in ["/app/config.txt", "./config.txt",
                         "/mount/src/orgmind-camp/config.txt"]:
                 if _dbg.path.exists(_p):
-                    cfg_found = True
                     with open(_p) as _f:
                         cfg_content = _f.read()
-                    st.caption(f"DEBUG config found at: {_p}")
+                    st.caption(f"Config found: {_p}")
                     break
-            if not cfg_found:
-                st.error("DEBUG: config.txt NOT FOUND in any location")
 
-            # Step 2: Try manual decode of OPENAI key
+            if not cfg_content:
+                st.error("config.txt not found — cannot rebuild.")
+                st.stop()
+
+            # Decode and set all keys NOW before any import
+            keys_set = []
             for line in cfg_content.split("\n"):
-                if line.startswith("OPENAI_API_KEY="):
-                    val = line.split("=",1)[1].strip()
-                    st.caption(f"DEBUG raw OPENAI value: {val[:20]}...")
-                    if val.startswith("b64:"):
-                        try:
-                            decoded = _b64.b64decode(val[4:]).decode("utf-8")
-                            _dbg.environ["OPENAI_API_KEY"] = decoded
-                            st.caption(f"DEBUG decoded OK: {decoded[:8]}...")
-                        except Exception as _e:
-                            st.error(f"DEBUG decode failed: {_e}")
+                line = line.strip()
+                if "=" not in line or line.startswith("#"):
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip(), v.strip()
+                if not v or v.startswith("replace_with"):
+                    continue
+                if v.startswith("b64:"):
+                    try:
+                        v = _b64.b64decode(v[4:]).decode("utf-8")
+                    except Exception:
+                        continue
+                _dbg.environ[k] = v
+                keys_set.append(k)
+
+            st.caption(f"Keys loaded: {keys_set}")
+            oai = _dbg.environ.get("OPENAI_API_KEY","NOT SET")
+            st.caption(f"OPENAI_API_KEY: {oai[:12]}...")
 
             from ingest import run_ingest
             with st.spinner("Building knowledge base... please wait."):
