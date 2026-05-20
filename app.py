@@ -428,6 +428,17 @@ if tab_admin is not None:
         if st.button("⚡  Rebuild Knowledge Base",
                      type="primary", use_container_width=True):
             from ingest import run_ingest
+            import os as _dbg
+            # Show what keys are visible at rebuild time
+            oai = _dbg.environ.get("OPENAI_API_KEY", "NOT_SET")
+            ant = _dbg.environ.get("ANTHROPIC_API_KEY", "NOT_SET")
+            st.caption(f"DEBUG — OPENAI: {oai[:8]}... | ANTHROPIC: {ant[:8]}...")
+            # Check /tmp/apikeys.txt
+            if _dbg.path.exists("/tmp/apikeys.txt"):
+                with open("/tmp/apikeys.txt") as _f:
+                    st.caption(f"DEBUG — apikeys.txt: {_f.read()[:60]}")
+            else:
+                st.caption("DEBUG — /tmp/apikeys.txt NOT FOUND")
             with st.spinner("Building knowledge base... please wait."):
                 result = run_ingest()
             if not result["success"]:
