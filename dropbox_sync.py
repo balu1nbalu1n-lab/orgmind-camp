@@ -90,6 +90,15 @@ def sync_from_dropbox():
                     break
 
         if not local_path:
+            # Last resort — match by folder name alone
+            folder_name = dropbox_folder.rstrip("/").split("/")[-1].lower()
+            for dp, lp in FOLDER_MAP.items():
+                dp_name = dp.rstrip("/").split("/")[-1].lower()
+                if folder_name == dp_name:
+                    local_path = lp
+                    break
+
+        if not local_path:
             continue
 
         local_file = os.path.join(local_path, fname)
