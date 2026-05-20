@@ -464,18 +464,36 @@ if tab_admin is not None:
 
         if st.button("⚡  Rebuild Knowledge Base",
                      type="primary", use_container_width=True):
+            import os as _dbg, base64 as _b64
+
+            # Step 1: Check config.txt exists and show raw content
+            cfg_found = False
+            cfg_content = ""
+            for _p in ["/app/config.txt", "./config.txt",
+                        "/mount/src/orgmind-camp/config.txt"]:
+                if _dbg.path.exists(_p):
+                    cfg_found = True
+                    with open(_p) as _f:
+                        cfg_content = _f.read()
+                    st.caption(f"DEBUG config found at: {_p}")
+                    break
+            if not cfg_found:
+                st.error("DEBUG: config.txt NOT FOUND in any location")
+
+            # Step 2: Try manual decode of OPENAI key
+            for line in cfg_content.split("\n"):
+                if line.startswith("OPENAI_API_KEY="):
+                    val = line.split("=",1)[1].strip()
+                    st.caption(f"DEBUG raw OPENAI value: {val[:20]}...")
+                    if val.startswith("b64:"):
+                        try:
+                            decoded = _b64.b64decode(val[4:]).decode("utf-8")
+                            _dbg.environ["OPENAI_API_KEY"] = decoded
+                            st.caption(f"DEBUG decoded OK: {decoded[:8]}...")
+                        except Exception as _e:
+                            st.error(f"DEBUG decode failed: {_e}")
+
             from ingest import run_ingest
-            import os as _dbg
-            # Show what keys are visible at rebuild time
-            oai = _dbg.environ.get("OPENAI_API_KEY", "NOT_SET")
-            ant = _dbg.environ.get("ANTHROPIC_API_KEY", "NOT_SET")
-            st.caption(f"DEBUG — OPENAI: {oai[:8]}... | ANTHROPIC: {ant[:8]}...")
-            # Check /tmp/apikeys.txt
-            if _dbg.path.exists("/tmp/apikeys.txt"):
-                with open("/tmp/apikeys.txt") as _f:
-                    st.caption(f"DEBUG — apikeys.txt: {_f.read()[:60]}")
-            else:
-                st.caption("DEBUG — /tmp/apikeys.txt NOT FOUND")
             with st.spinner("Building knowledge base... please wait."):
                 result = run_ingest()
             if not result["success"]:
