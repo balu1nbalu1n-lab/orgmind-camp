@@ -51,12 +51,26 @@ def _read_config(key):
 
 
 def get_dropbox_client():
-    """Get Dropbox token from config.txt or environment."""
+    """Get Dropbox client using refresh token (permanent) or access token."""
+    # Try refresh token first (permanent — never expires)
+    refresh_token = _read_config("DROPBOX_REFRESH_TOKEN")
+    if refresh_token and not refresh_token.startswith("replace_with"):
+        app_key = _read_config("DROPBOX_APP_KEY")
+        app_secret = _read_config("DROPBOX_APP_SECRET")
+        if app_key and app_secret:
+            return dropbox.Dropbox(
+                oauth2_refresh_token=refresh_token,
+                app_key=app_key,
+                app_secret=app_secret
+            )
+
+    # Fall back to access token
     token = _read_config("DROPBOX_ACCESS_TOKEN")
     if not token or token.startswith("replace_with"):
         raise ValueError(
-            "Dropbox access token not configured. "
-            "Add DROPBOX_ACCESS_TOKEN to your config.txt file."
+            "Dropbox not configured. "
+            "Add DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY and "
+            "DROPBOX_APP_SECRET to your config.txt file."
         )
     return dropbox.Dropbox(token)
 
