@@ -16,7 +16,9 @@ FOLDER_MAP = {
     f"{DROPBOX_BASE}/01_Legal_Contracts/Miscellaneous": "camp_documents/01_Legal_Contracts/Miscellaneous",
     f"{DROPBOX_BASE}/01_Legal_Contracts/Sub-Contracts": "camp_documents/01_Legal_Contracts/Sub-Contracts",
     f"{DROPBOX_BASE}/02_Staff_Related/SMART-Policies":  "camp_documents/02_Staff_Related/SMART-Policies",
-    f"{DROPBOX_BASE}/03_Research_Operations/Reports":   "camp_documents/03_Research_Operations/Reports",
+    f"{DROPBOX_BASE}/03_Research_Operations/Reports":          "camp_documents/03_Research_Operations/Reports",
+    f"{DROPBOX_BASE}/03_Research_Operations/Lab-Inventory":    "camp_documents/03_Research_Operations/Lab-Inventory",
+    f"{DROPBOX_BASE}/03_Research_Operations/Lab_Inventory":    "camp_documents/03_Research_Operations/Lab-Inventory",
     f"{DROPBOX_BASE}/03_Research_Operations/Research-Publications-Presentations-Discussions":
         "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
     f"{DROPBOX_BASE}/04_General_CAMP":                  "camp_documents/04_General_CAMP",
