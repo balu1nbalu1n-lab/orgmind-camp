@@ -46,7 +46,7 @@ DEPT_CONFIG = {
         "label": "Research Operations",
         "folders": [
             "camp_documents/03_Research_Operations/Reports",
-            "camp_documents/03_Research_Operations/Lab-Inventory",
+            "camp_documents/03_Research_Operations/Lab_Inventory",
             "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
             "camp_documents/03_Research_Operations",
         ]
