@@ -20,6 +20,7 @@ FOLDER_MAP = {
     f"{DROPBOX_BASE}/03_Research_Operations/Research-Publications-Presentations-Discussions":
         "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
     f"{DROPBOX_BASE}/04_General_CAMP":                  "camp_documents/04_General_CAMP",
+    f"{DROPBOX_BASE}/04_General _CAMP":               "camp_documents/04_General_CAMP",
 }
 
 
@@ -69,7 +70,7 @@ def sync_from_dropbox():
         if not isinstance(entry, dropbox.files.FileMetadata):
             continue
         fname = entry.name
-        if not fname.lower().endswith((".pdf", ".docx")):
+        if not fname.lower().endswith((".pdf", ".docx", ".xlsx", ".xls")):
             continue
         if fname.startswith(("~", ".")):
             continue

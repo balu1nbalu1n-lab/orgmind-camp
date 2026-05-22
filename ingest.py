@@ -11,6 +11,11 @@ load_dotenv()
 import fitz
 from docx import Document as Docx
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+try:
+    import openpyxl
+    EXCEL_SUPPORTED = True
+except ImportError:
+    EXCEL_SUPPORTED = False
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -54,6 +59,28 @@ DEPT_CONFIG = {
 }
 
 
+def read_excel(path):
+    """Convert Excel file to searchable text."""
+    if not EXCEL_SUPPORTED:
+        return ""
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True)
+        lines = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            lines.append(f"[Sheet: {sheet_name}]")
+            for row in ws.iter_rows():
+                row_values = []
+                for cell in row:
+                    if cell.value is not None:
+                        row_values.append(str(cell.value).strip())
+                if row_values:
+                    lines.append("  |  ".join(row_values))
+        return "\n".join(lines)
+    except Exception as e:
+        raise Exception(f"Could not read Excel: {e}")
+
+
 def read_pdf(path):
     doc = fitz.open(path)
     text = "\n".join(page.get_text() for page in doc)
@@ -71,7 +98,7 @@ def load_folder(folder_path, collection_name, seen_files):
     if not os.path.exists(folder_path):
         return docs
     for fname in sorted(os.listdir(folder_path)):
-        if not fname.lower().endswith((".pdf", ".docx")):
+        if not fname.lower().endswith((".pdf", ".docx", ".xlsx", ".xls")):
             continue
         if fname.startswith(("~", ".")):
             continue
@@ -80,8 +107,12 @@ def load_folder(folder_path, collection_name, seen_files):
             continue
         seen_files.add(fpath)
         try:
-            text = (read_pdf(fpath) if fname.lower().endswith(".pdf")
-                    else read_docx(fpath))
+            if fname.lower().endswith(".pdf"):
+                text = read_pdf(fpath)
+            elif fname.lower().endswith((".xlsx", ".xls")):
+                text = read_excel(fpath)
+            else:
+                text = read_docx(fpath)
             if len(text.strip()) < 100:
                 print(f"    SKIPPED (too short/scanned): {fname}")
                 continue
