@@ -186,24 +186,44 @@ st.markdown("---")
 # ── TABS ──────────────────────────────────────────────────────────────────────
 legal_unlocked = st.session_state["legal_unlocked"]
 is_admin = st.session_state["is_admin"]
-is_staff = selected_folder == "Staff Related"
-is_legal = selected_folder == "Legal & Contracts"
+is_staff_folder    = selected_folder == "Staff Related"
+is_legal_folder    = selected_folder == "Legal & Contracts"
+is_research_folder = selected_folder == "Research Operations"
+
+# Exception Analyser: Legal & Contracts folder + admin or legal access only
+show_exception = is_legal_folder and (is_admin or legal_unlocked)
+# Research Synthesis: Research Operations folder only
+show_synthesis = is_research_folder
+
+tab2 = None
+tab3 = None
+tab_admin = None
 
 if is_admin:
-    if is_staff:
-        tab1, tab_admin = st.tabs(["💬  Ask OrgMind", "⚙️  Admin"])
-        tab2 = None
-    else:
+    if show_exception and show_synthesis:
+        tab1, tab2, tab3, tab_admin = st.tabs([
+            "💬  Ask OrgMind", "📋  Exception Analyser",
+            "🔬  Research Synthesis", "⚙️  Admin"])
+    elif show_exception:
         tab1, tab2, tab_admin = st.tabs([
             "💬  Ask OrgMind", "📋  Exception Analyser", "⚙️  Admin"])
+    elif show_synthesis:
+        tab1, tab3, tab_admin = st.tabs([
+            "💬  Ask OrgMind", "🔬  Research Synthesis", "⚙️  Admin"])
+    else:
+        tab1, tab_admin = st.tabs(["💬  Ask OrgMind", "⚙️  Admin"])
 else:
-    tab_admin = None
-    if is_staff:
+    if show_exception and show_synthesis:
+        tab1, tab2, tab3 = st.tabs([
+            "💬  Ask OrgMind", "📋  Exception Analyser",
+            "🔬  Research Synthesis"])
+    elif show_exception:
+        tab1, tab2 = st.tabs(["💬  Ask OrgMind", "📋  Exception Analyser"])
+    elif show_synthesis:
+        tab1, tab3 = st.tabs(["💬  Ask OrgMind", "🔬  Research Synthesis"])
+    else:
         tabs = st.tabs(["💬  Ask OrgMind"])
         tab1 = tabs[0]
-        tab2 = None
-    else:
-        tab1, tab2 = st.tabs(["💬  Ask OrgMind", "📋  Exception Analyser"])
 
 # ══ TAB 1: ASK ORGMIND ════════════════════════════════════════════════════════
 with tab1:
@@ -213,14 +233,15 @@ with tab1:
             "agreements — RCAs, NDAs, MTAs, LOAs, Sub-Contracts or "
             "pre-agreement discussions in Miscellaneous.",
         "Staff Related":
-            "Ask about any SMART policy — leave, travel, claims, "
-            "onboarding, training or HR procedures.",
+            "Ask about SMART policies, EHS rules, finance procedures, "
+            "leave, travel, claims, onboarding, training or any "
+            "general institutional policies and decisions.",
         "Research Operations":
-            "Ask about lab equipment, inventory, locations, reports "
-            "or research project findings.",
+            "Ask about lab equipment, inventory, locations, reports, "
+            "research project findings, SOPs or risk assessments.",
         "General CAMP":
-            "Ask about CAMP policies, EHS rules, finance procedures "
-            "or general institutional decisions.",
+            "Ask about CAMP Standard Operating Procedures (SOPs) "
+            "and Risk Assessment documents.",
         "All (Search Everything)":
             "Searches across all accessible CAMP folders simultaneously.",
     }
@@ -361,6 +382,171 @@ if tab2 is not None:
                     ).replace(".docx", f"_{doc_type}_ExceptionReport.txt"),
                     use_container_width=True
                 )
+
+
+# ══ TAB 3: RESEARCH SYNTHESIS ════════════════════════════════════════════════
+if tab3 is not None:
+    with tab3:
+        st.markdown("### 🔬 Research Synthesis")
+        st.markdown(
+            "Generate cross-document insights from CAMP's research "
+            "presentations and publications. OrgMind reads across all "
+            "documents simultaneously to find **connections, patterns, "
+            "contradictions and knowledge gaps** that no single document "
+            "reveals alone."
+        )
+        st.markdown("---")
+
+        synthesis_mode = st.selectbox(
+            "What would you like to synthesise?",
+            [
+                "Recurring themes and topics across all presentations",
+                "Technical challenges mentioned across presentations",
+                "Connections between different research projects",
+                "Contradictions or disagreements across presentations",
+                "Knowledge gaps — questions raised but not answered",
+                "Key decisions and conclusions reached",
+                "Tacit knowledge — informal insights from discussions",
+                "Custom synthesis question (type below)",
+            ],
+            index=0
+        )
+
+        custom_q = ""
+        if "Custom" in synthesis_mode:
+            custom_q = st.text_area(
+                "Your synthesis question:",
+                height=80,
+                placeholder="e.g. What manufacturing approaches have been "
+                            "discussed and which seem most promising?"
+            )
+
+        depth = st.select_slider(
+            "Analysis depth:",
+            options=["Quick overview", "Standard", "Deep analysis"],
+            value="Standard"
+        )
+
+        depth_instructions = {
+            "Quick overview": "Provide a concise 3-5 point summary.",
+            "Standard": "Provide a structured analysis with evidence "
+                        "from specific documents.",
+            "Deep analysis": "Provide a comprehensive analysis with detailed "
+                             "evidence, specific references from the documents, "
+                             "and actionable implications for CAMP.",
+        }
+
+        st.warning(
+            "⚠️ Research Synthesis sends complete document text to Claude "
+            "for cross-document analysis. Only use with documents approved "
+            "for external AI processing. Do not use with unpublished "
+            "research data or sensitive pre-publication findings."
+        )
+        st.markdown("---")
+
+        mode_prompts = {
+            "Recurring themes and topics across all presentations":
+                "Identify and analyse the recurring themes, topics and research "
+                "areas across multiple documents. For each theme: which documents "
+                "discuss it, what different perspectives are offered, and how "
+                "thinking has evolved.",
+            "Technical challenges mentioned across presentations":
+                "Identify all technical challenges and obstacles mentioned. "
+                "Group related challenges. Note which appear in multiple documents "
+                "— these are systemic issues. Note any challenges where a solution "
+                "proposed in one document could address a problem raised in another.",
+            "Connections between different research projects":
+                "Identify non-obvious connections between different research "
+                "projects. Look for: shared methodologies, complementary findings, "
+                "overlapping problems, opportunities for collaboration, and cases "
+                "where one project output could be another project input.",
+            "Contradictions or disagreements across presentations":
+                "Identify contradictions, disagreements or conflicting assumptions. "
+                "Look for: different conclusions from similar experiments, "
+                "conflicting recommendations, different definitions of the same "
+                "terms, and areas where consensus has not been reached.",
+            "Knowledge gaps — questions raised but not answered":
+                "Identify knowledge gaps — questions and open problems raised "
+                "across documents but not resolved. Note which gaps appear "
+                "repeatedly — these are the most significant research opportunities.",
+            "Key decisions and conclusions reached":
+                "Extract key decisions, conclusions and recommendations that "
+                "emerged. Distinguish between firm conclusions supported by data "
+                "and tentative suggestions requiring further investigation.",
+            "Tacit knowledge — informal insights from discussions":
+                "Extract tacit knowledge from informal discussion portions — "
+                "spontaneous comments, off-the-cuff observations, experiential "
+                "insights and informal recommendations. This is knowledge rarely "
+                "written down formally but often most valuable practically.",
+        }
+
+        if st.button("🔬  Generate Research Synthesis", type="primary"):
+            if "Custom" in synthesis_mode and custom_q.strip():
+                analysis_task = custom_q.strip()
+            else:
+                analysis_task = mode_prompts.get(synthesis_mode, "")
+
+            synthesis_prompt = f"""You are performing a RESEARCH SYNTHESIS across
+CAMP research presentation transcripts and discussion documents.
+
+SYNTHESIS TASK:
+{analysis_task}
+
+DEPTH REQUIREMENT:
+{depth_instructions[depth]}
+
+INSTRUCTIONS:
+1. Read ALL provided document excerpts before writing synthesis.
+2. Cite which document (filename) each insight comes from.
+3. Actively look for connections BETWEEN documents — the 1+1>2 insights
+   that neither document reveals alone. These are most valuable.
+4. Be specific — name the documents and what they say.
+5. End with a section "CROSS-DOCUMENT CONNECTIONS" listing non-obvious
+   links found between different documents.
+"""
+
+            with st.spinner(
+                "Reading across all research documents... "
+                f"Generating {depth.lower()} synthesis... "
+                "This takes 45–90 seconds."
+            ):
+                result = query(
+                    synthesis_prompt,
+                    "Research Operations",
+                    legal_unlocked=legal_unlocked
+                )
+
+            st.markdown("---")
+            st.markdown("## Synthesis Report")
+            st.markdown(
+                f"**Mode:** {synthesis_mode if 'Custom' not in synthesis_mode else custom_q[:60]+'...'}"
+            )
+            st.markdown(f"**Depth:** {depth}")
+            st.markdown("---")
+            st.markdown(result["answer"])
+
+            if result.get("sources"):
+                st.markdown("---")
+                unique = sorted(set(s for s in result["sources"] if s))
+                st.markdown("**Documents analysed:**")
+                html = " ".join(
+                    f'<span class="source-tag">{s}</span>' for s in unique)
+                st.markdown(html, unsafe_allow_html=True)
+
+            report = (
+                f"RESEARCH SYNTHESIS REPORT\n"
+                f"Mode: {synthesis_mode}\n"
+                f"Depth: {depth}\n"
+                f"{'='*60}\n\n"
+                f"{result['answer']}"
+            )
+            st.download_button(
+                "📥  Download Synthesis Report",
+                data=report,
+                file_name="CAMP_Research_Synthesis_Report.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
 
 # ══ ADMIN TAB ═════════════════════════════════════════════════════════════════
 if tab_admin is not None:
@@ -542,15 +728,17 @@ with st.sidebar:
         st.warning("Not built yet")
     st.markdown("---")
     st.markdown("**Your folders:**")
+    folder_desc = {
+        "Legal & Contracts":   ("⚖️", "RCA · NDA · MTA · LOA"),
+        "Staff Related":       ("👥", "Policies · EHS · Finance · HR"),
+        "Research Operations": ("🔬", "Lab · Equipment · Reports · Synthesis"),
+        "General CAMP":        ("📋", "SOPs · Risk Assessments"),
+        "All (Search Everything)": ("🔍", "All folders"),
+    }
     for f in get_folder_options(legal_unlocked):
-        icons = {
-            "Legal & Contracts": "⚖️",
-            "Staff Related": "👥",
-            "Research Operations": "🔬",
-            "General CAMP": "📋",
-            "All (Search Everything)": "🔍"
-        }
-        st.markdown(f"{icons.get(f,'📁')}  {f}")
+        icon, desc = folder_desc.get(f, ("📁", ""))
+        st.markdown(f"{icon}  **{f}**")
+        st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;{desc}")
     st.markdown("---")
     st.markdown("**Tips:**")
     st.markdown("Be specific. Include document type and context.")
