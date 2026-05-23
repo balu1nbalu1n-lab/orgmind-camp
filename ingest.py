@@ -145,7 +145,7 @@ def run_ingest():
                 "total_docs": 0, "total_chunks": 0, "details": {}}
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=200,
+        chunk_size=1500, chunk_overlap=400,
         separators=["\n\n", "\n", ". ", " "]
     )
 

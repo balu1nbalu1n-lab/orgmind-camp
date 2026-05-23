@@ -82,7 +82,7 @@ def query(question, department="All (Search Everything)",
           doc_type_filter=None, legal_unlocked=False):
 
     is_synthesis = "RESEARCH SYNTHESIS" in question
-    k_value = 20 if is_synthesis else 12
+    k_value = 20 if is_synthesis else 16
 
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     collections = get_collections(department, legal_unlocked)
