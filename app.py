@@ -240,8 +240,8 @@ with tab1:
             "Ask about lab equipment, inventory, locations, reports, "
             "research project findings, SOPs or risk assessments.",
         "General CAMP":
-            "Ask about CAMP Standard Operating Procedures (SOPs) "
-            "and Risk Assessment documents.",
+            "Ask about CAMP SOPs, Risk Assessments, Safety Orientation, "
+            "EHS procedures, equipment in photos, diagrams and process flows.",
         "All (Search Everything)":
             "Searches across all accessible CAMP folders simultaneously.",
     }
@@ -598,17 +598,37 @@ if tab_admin is not None:
         st.markdown("Run after every Sync. Makes all new documents searchable.")
         st.warning("Takes 2-5 minutes. Users can still query during rebuild.")
 
+        enable_vision = st.toggle(
+            "🔍 Enable Vision AI (describe images in documents)",
+            value=True,
+            help="When on, embedded images in PDFs and DOCX are described "
+                 "by Claude Vision and added to the knowledge base. "
+                 "Takes longer but captures charts, equipment photos and diagrams."
+        )
+        if enable_vision:
+            st.info(
+                "Vision AI is ON — images in documents will be described and indexed. "
+                "Ingestion will take longer depending on number of images."
+            )
+
         if st.button("⚡  Rebuild Knowledge Base",
                      type="primary", use_container_width=True):
             from ingest import run_ingest
-            with st.spinner("Building knowledge base... please wait."):
-                result = run_ingest()
+            spinner_msg = (
+                "Building knowledge base with Vision AI... "
+                "Images are being described — this may take several minutes."
+                if enable_vision else
+                "Building knowledge base... please wait."
+            )
+            with st.spinner(spinner_msg):
+                result = run_ingest(enable_vision=enable_vision)
             if not result["success"]:
                 st.error(f"Rebuild failed: {result['error']}")
             else:
+                vision_status = "✅ Vision AI ON" if result.get("vision_enabled") else "⚠️ Vision AI OFF"
                 st.success(
                     f"Done: **{result['total_docs']} documents**, "
-                    f"{result['total_chunks']} searchable chunks"
+                    f"{result['total_chunks']} searchable chunks  ·  {vision_status}"
                 )
                 for label, info in result["details"].items():
                     icon = "✅" if info.get("docs", 0) > 0 else "⏳"
@@ -732,7 +752,7 @@ with st.sidebar:
         "Legal & Contracts":   ("⚖️", "RCA · NDA · MTA · LOA"),
         "Staff Related":       ("👥", "Policies · EHS · Finance · HR"),
         "Research Operations": ("🔬", "Lab · Equipment · Reports · Synthesis"),
-        "General CAMP":        ("📋", "SOPs · Risk Assessments"),
+        "General CAMP":        ("📋", "SOPs · Risk Assessments · Safety · EHS"),
         "All (Search Everything)": ("🔍", "All folders"),
     }
     for f in get_folder_options(legal_unlocked):
