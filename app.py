@@ -593,11 +593,13 @@ if tab_admin is not None:
 
         st.markdown("---")
 
-        # ── 2. Rebuild ────────────────────────────────────────────────────
+       # ── 2. Rebuild ────────────────────────────────────────────────────
         st.markdown("### 2.  Rebuild Knowledge Base")
         st.markdown("Run after every Sync. Makes all new documents searchable.")
-        st.warning("Takes 2-5 minutes. Users can still query during rebuild.")
-
+        st.warning(
+            "Processes files in small batches to avoid server timeouts. "
+            "Users can still query during rebuild."
+        )
         enable_vision = st.toggle(
             "🔍 Enable Vision AI (describe images in documents)",
             value=True,
@@ -607,37 +609,72 @@ if tab_admin is not None:
         )
         if enable_vision:
             st.info(
-                "Vision AI is ON — images in documents will be described and indexed. "
-                "Ingestion will take longer depending on number of images."
+                "Vision AI is ON — images in documents will be described and indexed."
             )
 
-        if st.button("⚡  Rebuild Knowledge Base",
-                     type="primary", use_container_width=True):
+        # Optional: let an admin force a full re-ingest if needed
+        with st.expander("Advanced"):
+            if st.button("⚠️ Reset progress tracking (forces full re-ingest)"):
+                from ingest import reset_manifest
+                reset_manifest()
+                st.success("Manifest cleared. Next rebuild will reprocess all files.")
+
+        col1, col2 = st.columns([2, 1])
+        start_clicked = col1.button(
+            "⚡  Rebuild Knowledge Base", type="primary", use_container_width=True
+        )
+        stop_clicked = col2.button("⏸ Stop", use_container_width=True)
+
+        if stop_clicked:
+            st.session_state["orgmind_rebuild_running"] = False
+
+        if start_clicked:
+            st.session_state["orgmind_rebuild_running"] = True
+            st.session_state["orgmind_rebuild_total_processed"] = 0
+            st.session_state["orgmind_rebuild_total_chunks"] = 0
+
+        if st.session_state.get("orgmind_rebuild_running"):
             from ingest import run_ingest
+
+            progress_placeholder = st.empty()
             spinner_msg = (
                 "Building knowledge base with Vision AI... "
-                "Images are being described — this may take several minutes."
+                "Images are being described — this runs in small batches."
                 if enable_vision else
-                "Building knowledge base... please wait."
+                "Building knowledge base... running in small batches."
             )
+
             with st.spinner(spinner_msg):
-                result = run_ingest(enable_vision=enable_vision)
+                result = run_ingest(enable_vision=enable_vision, batch_size=10)
+
             if not result["success"]:
+                st.session_state["orgmind_rebuild_running"] = False
                 st.error(f"Rebuild failed: {result['error']}")
             else:
-                vision_status = "✅ Vision AI ON" if result.get("vision_enabled") else "⚠️ Vision AI OFF"
-                st.success(
-                    f"Done: **{result['total_docs']} documents**, "
-                    f"{result['total_chunks']} searchable chunks  ·  {vision_status}"
+                st.session_state["orgmind_rebuild_total_processed"] += result["processed"]
+                st.session_state["orgmind_rebuild_total_chunks"] += result["total_chunks"]
+
+                done_so_far = st.session_state["orgmind_rebuild_total_processed"]
+                remaining = result["remaining"]
+
+                progress_placeholder.info(
+                    f"Batch complete: **{result['processed']} file(s)** processed "
+                    f"({done_so_far} total so far)  ·  "
+                    f"**{remaining} file(s)** still pending"
                 )
-                for label, info in result["details"].items():
-                    icon = "✅" if info.get("docs", 0) > 0 else "⏳"
-                    st.markdown(
-                        f"&nbsp;&nbsp;{icon}  {label}: "
-                        f"{info.get('docs',0)} docs, {info.get('chunks',0)} chunks"
+
+                if remaining > 0:
+                    # Automatically continue with the next batch
+                    st.rerun()
+                else:
+                    st.session_state["orgmind_rebuild_running"] = False
+                    vision_status = "✅ Vision AI ON" if result.get("vision_enabled") else "⚠️ Vision AI OFF"
+                    st.success(
+                        f"All done: **{done_so_far} documents** processed this run, "
+                        f"{st.session_state['orgmind_rebuild_total_chunks']} chunks added  ·  "
+                        f"{vision_status}"
                     )
 
-        st.markdown("---")
 
         # ── 3. Delete ─────────────────────────────────────────────────────
         st.markdown("### 3.  Delete a Document")

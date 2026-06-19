@@ -1,6 +1,14 @@
 """
-OrgMind @ SMART — Document Ingestion v5.0
+OrgMind @ SMART — Document Ingestion v5.1
 ==========================================
+New in v5.1:
+  - Manifest tracking: already-ingested files are skipped on rerun
+    (no more re-processing all 231 files every time you click Rebuild)
+  - Batching: only `batch_size` NEW files are processed per call,
+    so each run stays under Render's request timeout (fixes 502 errors)
+  - app.py can call run_ingest() repeatedly (via st.rerun loop) until
+    result["remaining"] == 0
+
 New in v5.0:
   - Vision AI: images in PDFs and DOCX are described by Claude
   - New General CAMP subfolders added
@@ -10,6 +18,7 @@ New in v5.0:
 
 import os
 import sys
+import json
 import base64
 import anthropic
 from dotenv import load_dotenv
@@ -49,6 +58,7 @@ except ImportError:
     EXCEL_SUPPORTED = False
 
 CHROMA_PATH = "./chroma_db"
+MANIFEST_PATH = "./ingested_manifest.json"
 
 # ── Folder → Collection mapping ───────────────────────────────────────────────
 DEPT_CONFIG = {
@@ -94,6 +104,29 @@ DEPT_CONFIG = {
 }
 
 
+# ── Manifest helpers ───────────────────────────────────────────────────────────
+def load_manifest():
+    """
+    Returns dict: { filepath: {"collection": ..., "chunks": N, "mtime": ...} }
+    An empty/missing manifest just means nothing has been ingested yet.
+    """
+    if os.path.exists(MANIFEST_PATH):
+        try:
+            with open(MANIFEST_PATH, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_manifest(manifest):
+    try:
+        with open(MANIFEST_PATH, "w") as f:
+            json.dump(manifest, f, indent=2)
+    except Exception as e:
+        print(f"  WARNING: could not save manifest: {e}")
+
+
 # ── Vision AI — describe images using Claude ──────────────────────────────────
 def describe_image(image_bytes, image_context="", page_num=None):
     """
@@ -103,10 +136,10 @@ def describe_image(image_bytes, image_context="", page_num=None):
     try:
         client = anthropic.Anthropic(
             api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-        
+
         # Encode image
         img_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-        
+
         # Detect image type
         if image_bytes[:4] == b'\x89PNG':
             media_type = "image/png"
@@ -160,7 +193,7 @@ def describe_image(image_bytes, image_context="", page_num=None):
         )
         return response.content[0].text.strip()
 
-    except Exception as e:
+    except Exception:
         return ""
 
 
@@ -175,12 +208,10 @@ def read_pdf(path, fname, enable_vision=True):
     image_count = 0
 
     for page_num, page in enumerate(doc, 1):
-        # Get page text
         page_text = page.get_text()
         if page_text.strip():
             all_content.append(f"[Page {page_num}]\n{page_text}")
 
-        # Get images on this page
         if enable_vision:
             image_list = page.get_images(full=True)
             for img_index, img in enumerate(image_list):
@@ -219,12 +250,10 @@ def read_docx(path, fname, enable_vision=True):
     all_content = []
     image_count = 0
 
-    # Extract text
     for para in doc.paragraphs:
         if para.text.strip():
             all_content.append(para.text)
 
-    # Extract text from tables
     for table in doc.tables:
         for row in table.rows:
             row_text = "  |  ".join(
@@ -234,7 +263,6 @@ def read_docx(path, fname, enable_vision=True):
             if row_text:
                 all_content.append(row_text)
 
-    # Extract and describe images
     if enable_vision:
         for rel in doc.part.rels.values():
             if "image" in rel.reltype:
@@ -281,65 +309,92 @@ def read_excel(path):
         raise Exception(f"Could not read Excel: {e}")
 
 
-# ── Folder loader ─────────────────────────────────────────────────────────────
-def load_folder(folder_path, collection_name, seen_files, enable_vision=True):
-    docs = []
-    if not os.path.exists(folder_path):
-        return docs
-
-    for fname in sorted(os.listdir(folder_path)):
-        ext = fname.lower().split('.')[-1]
-        if ext not in ('pdf', 'docx', 'xlsx', 'xls'):
-            continue
-        if fname.startswith(("~", ".")):
-            continue
-
-        fpath = os.path.join(folder_path, fname)
-        if fpath in seen_files:
-            continue
-        seen_files.add(fpath)
-
-        try:
-            if ext == 'pdf':
-                text = read_pdf(fpath, fname, enable_vision)
-            elif ext in ('xlsx', 'xls'):
-                text = read_excel(fpath)
-            else:
-                text = read_docx(fpath, fname, enable_vision)
-
-            if len(text.strip()) < 100:
-                print(f"    SKIPPED (too short/scanned): {fname}")
-                continue
-
-            fname_upper = fname.upper()
-            doc_type = "GENERAL"
-            for t in ["RCA", "NDA", "MTA", "LOA"]:
-                if t in fname_upper:
-                    doc_type = t
-                    break
-
-            docs.append(Document(
-                page_content=text,
-                metadata={
-                    "source": fname,
-                    "collection": collection_name,
-                    "doc_type": doc_type,
-                    "filepath": fpath
-                }
-            ))
-            print(f"    Loaded ({doc_type}): {fname}")
-
-        except Exception as e:
-            print(f"    ERROR {fname}: {e}")
-
-    return docs
-
-
-# ── Main ingestion ────────────────────────────────────────────────────────────
-def run_ingest(enable_vision=True):
+# ── File discovery (manifest-aware) ───────────────────────────────────────────
+def discover_pending_files(manifest):
     """
-    Run full ingestion with optional Vision AI for images.
-    Returns summary dict.
+    Walks all configured folders and returns a list of
+    (filepath, fname, ext, collection_name) tuples for files
+    NOT already in the manifest. Order is stable (sorted) so
+    batches are deterministic across repeated calls.
+    """
+    pending = []
+    seen_paths = set()
+
+    for collection_name, config in DEPT_CONFIG.items():
+        for folder in config["folders"]:
+            if not os.path.exists(folder):
+                continue
+            for fname in sorted(os.listdir(folder)):
+                ext = fname.lower().split('.')[-1]
+                if ext not in ('pdf', 'docx', 'xlsx', 'xls'):
+                    continue
+                if fname.startswith(("~", ".")):
+                    continue
+
+                fpath = os.path.join(folder, fname)
+                if fpath in seen_paths:
+                    continue  # same file reachable via two folder entries (e.g. parent + subfolder listing)
+                seen_paths.add(fpath)
+
+                if fpath in manifest:
+                    continue  # already ingested in a previous run/batch
+
+                pending.append((fpath, fname, ext, collection_name))
+
+    return pending
+
+
+def process_file(fpath, fname, ext, enable_vision):
+    """
+    Reads a single file and returns a langchain Document, or None if
+    skipped (too short / scanned / unreadable).
+    Raises on hard errors so the caller can log and continue.
+    """
+    if ext == 'pdf':
+        text = read_pdf(fpath, fname, enable_vision)
+    elif ext in ('xlsx', 'xls'):
+        text = read_excel(fpath)
+    else:
+        text = read_docx(fpath, fname, enable_vision)
+
+    if len(text.strip()) < 100:
+        return None
+
+    fname_upper = fname.upper()
+    doc_type = "GENERAL"
+    for t in ["RCA", "NDA", "MTA", "LOA"]:
+        if t in fname_upper:
+            doc_type = t
+            break
+
+    return Document(
+        page_content=text,
+        metadata={
+            "source": fname,
+            "doc_type": doc_type,
+            "filepath": fpath
+        }
+    )
+
+
+# ── Main ingestion (batched, manifest-aware) ──────────────────────────────────
+def run_ingest(enable_vision=True, batch_size=10):
+    """
+    Process up to `batch_size` NEW (not-yet-ingested) files, embed them,
+    and update the manifest. Safe to call repeatedly — each call only
+    touches files that haven't been ingested yet, so a 502/timeout never
+    loses progress on files that already completed.
+
+    Returns:
+      {
+        "success": bool,
+        "processed": int,       # files processed in THIS call
+        "remaining": int,       # files still pending after this call
+        "total_chunks": int,    # chunks added in THIS call
+        "details": {...},       # per-collection breakdown for this call
+        "vision_enabled": bool,
+        "error": str (only if success=False)
+      }
     """
     if enable_vision:
         key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -348,11 +403,14 @@ def run_ingest(enable_vision=True):
                   "running without Vision AI")
             enable_vision = False
 
+    manifest = load_manifest()
+
     try:
         embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     except Exception as e:
         return {"success": False, "error": str(e),
-                "total_docs": 0, "total_chunks": 0, "details": {}}
+                "processed": 0, "remaining": 0,
+                "total_chunks": 0, "details": {}}
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1500,
@@ -360,28 +418,47 @@ def run_ingest(enable_vision=True):
         separators=["\n\n", "\n", ". ", " "]
     )
 
-    total_docs = total_chunks = 0
+    pending = discover_pending_files(manifest)
+    total_pending = len(pending)
+    this_batch = pending[:batch_size]
+
+    print(f"\n[Batch] {len(this_batch)} file(s) this run, "
+          f"{total_pending} total pending before this run")
+
+    # Group this batch's docs by collection so we can write to the right
+    # Chroma collection, while still respecting the overall batch_size cap.
+    docs_by_collection = {name: [] for name in DEPT_CONFIG}
+    processed = 0
     details = {}
 
-    for collection_name, config in DEPT_CONFIG.items():
-        label = config["label"]
-        seen_files = set()
-        all_docs = []
+    for fpath, fname, ext, collection_name in this_batch:
+        label = DEPT_CONFIG[collection_name]["label"]
+        try:
+            doc = process_file(fpath, fname, ext, enable_vision)
+            if doc is None:
+                print(f"    SKIPPED (too short/scanned): {fname}")
+                # Mark as seen so we don't retry it every batch forever
+                manifest[fpath] = {
+                    "collection": collection_name,
+                    "chunks": 0,
+                    "status": "skipped"
+                }
+                continue
 
-        print(f"\n[{label}]")
-        for folder in config["folders"]:
-            folder_docs = load_folder(
-                folder, collection_name, seen_files, enable_vision)
-            all_docs.extend(folder_docs)
+            docs_by_collection[collection_name].append(doc)
+            processed += 1
+            print(f"    Loaded ({label}): {fname}")
 
-        if not all_docs:
-            print(f"  No documents found")
-            details[label] = {"docs": 0, "chunks": 0}
+        except Exception as e:
+            print(f"    ERROR {fname}: {e}")
+            # Don't add to manifest — will be retried next batch
+
+    # Embed + write each collection's new docs
+    for collection_name, new_docs in docs_by_collection.items():
+        if not new_docs:
             continue
-
-        chunks = splitter.split_documents(all_docs)
-        print(f"  {len(all_docs)} documents → {len(chunks)} chunks")
-
+        label = DEPT_CONFIG[collection_name]["label"]
+        chunks = splitter.split_documents(new_docs)
         try:
             Chroma.from_documents(
                 documents=chunks,
@@ -389,33 +466,56 @@ def run_ingest(enable_vision=True):
                 collection_name=collection_name,
                 persist_directory=CHROMA_PATH
             )
-            details[label] = {
-                "docs": len(all_docs), "chunks": len(chunks)}
-            total_docs += len(all_docs)
-            total_chunks += len(chunks)
+            details[label] = {"docs": len(new_docs), "chunks": len(chunks)}
+
+            # Only mark files as ingested AFTER a successful Chroma write
+            for doc in new_docs:
+                manifest[doc.metadata["filepath"]] = {
+                    "collection": collection_name,
+                    "chunks": len(chunks),  # approximate (per-collection batch)
+                    "status": "ingested"
+                }
+
         except Exception as e:
             details[label] = {"docs": 0, "chunks": 0, "error": str(e)}
+            print(f"    ERROR writing collection {label} to Chroma: {e}")
+
+    save_manifest(manifest)
+
+    remaining = max(0, total_pending - processed)
+    total_chunks = sum(d.get("chunks", 0) for d in details.values())
 
     return {
         "success": True,
-        "total_docs": total_docs,
+        "processed": processed,
+        "remaining": remaining,
         "total_chunks": total_chunks,
         "details": details,
         "vision_enabled": enable_vision
     }
 
 
+def reset_manifest():
+    """
+    Wipes the manifest only (does NOT touch Chroma DB).
+    Use this if you intentionally want to force a full re-ingest,
+    e.g. after changing chunking strategy or fixing a bug in extraction.
+    """
+    if os.path.exists(MANIFEST_PATH):
+        os.remove(MANIFEST_PATH)
+
+
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("  OrgMind @ CAMP — Document Ingestion v5.0")
-    print("  Vision AI: images described and indexed")
+    print("  OrgMind @ CAMP — Document Ingestion v5.1 (batched)")
     print("="*60)
     result = run_ingest()
     if not result["success"]:
         print(f"\n ERROR: {result['error']}")
     else:
         vision = "✅ ON" if result.get("vision_enabled") else "⚠️ OFF"
-        print(f"\n  Done!  {result['total_docs']} documents loaded")
-        print(f"         {result['total_chunks']} searchable chunks")
-        print(f"         Vision AI: {vision}")
+        print(f"\n  Batch done: {result['processed']} file(s) processed")
+        print(f"              {result['remaining']} file(s) still pending")
+        print(f"              {result['total_chunks']} chunks added this batch")
+        print(f"              Vision AI: {vision}")
     print("="*60 + "\n")
