@@ -82,13 +82,11 @@ DEPT_CONFIG = {
         ]
     },
     "camp_research_ops": {
-        "label": "Research Operations",
+        "label": "Research",
         "folders": [
-            "camp_documents/03_Research_Operations/Reports",
-            "camp_documents/03_Research_Operations/Lab_Inventory",
-            "camp_documents/03_Research_Operations/Equipment",
-            "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
-            "camp_documents/03_Research_Operations",
+            "camp_documents/03_Research/Reports",
+            "camp_documents/03_Research/Research-Publications-Presentations-Discussions",
+            "camp_documents/03_Research",
         ]
     },
     "camp_general": {
@@ -98,6 +96,8 @@ DEPT_CONFIG = {
             "camp_documents/04_General_CAMP/Project Risk Assessment",
             "camp_documents/04_General_CAMP/Safety Orientation and training",
             "camp_documents/04_General_CAMP/SOPs",
+            "camp_documents/04_General_CAMP/Equipment",
+            "camp_documents/04_General_CAMP/Lab_Inventory",
             "camp_documents/04_General_CAMP",
         ]
     },

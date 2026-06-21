@@ -7,7 +7,6 @@ import os
 import dropbox
 
 DROPBOX_BASE = "/OrgMind-CAMP"
-
 FOLDER_MAP = {
     f"{DROPBOX_BASE}/01_Legal_Contracts/RCA":           "camp_documents/01_Legal_Contracts/RCA",
     f"{DROPBOX_BASE}/01_Legal_Contracts/NDA":           "camp_documents/01_Legal_Contracts/NDA",
@@ -16,14 +15,15 @@ FOLDER_MAP = {
     f"{DROPBOX_BASE}/01_Legal_Contracts/Miscellaneous": "camp_documents/01_Legal_Contracts/Miscellaneous",
     f"{DROPBOX_BASE}/01_Legal_Contracts/Sub-Contracts": "camp_documents/01_Legal_Contracts/Sub-Contracts",
     f"{DROPBOX_BASE}/02_Staff_Related/SMART-Policies":  "camp_documents/02_Staff_Related/SMART-Policies",
-    f"{DROPBOX_BASE}/03_Research_Operations/Reports":          "camp_documents/03_Research_Operations/Reports",
-    f"{DROPBOX_BASE}/03_Research_Operations/Lab_Inventory":    "camp_documents/03_Research_Operations/Lab_Inventory",
-    f"{DROPBOX_BASE}/03_Research_Operations/Research-Publications-Presentations-Discussions":
-        "camp_documents/03_Research_Operations/Research-Publications-Presentations-Discussions",
+    f"{DROPBOX_BASE}/03_Research/Reports":          "camp_documents/03_Research/Reports",
+    f"{DROPBOX_BASE}/03_Research/Research-Publications-Presentations-Discussions":
+        "camp_documents/03_Research/Research-Publications-Presentations-Discussions",
     f"{DROPBOX_BASE}/04_General_CAMP/Activity Risk Assessments": "camp_documents/04_General_CAMP/Activity Risk Assessments",
     f"{DROPBOX_BASE}/04_General_CAMP/Project Risk Assessment":    "camp_documents/04_General_CAMP/Project Risk Assessment",
     f"{DROPBOX_BASE}/04_General_CAMP/Safety Orientation and training": "camp_documents/04_General_CAMP/Safety Orientation and training",
     f"{DROPBOX_BASE}/04_General_CAMP/SOPs":                       "camp_documents/04_General_CAMP/SOPs",
+    f"{DROPBOX_BASE}/04_General_CAMP/Equipment":                  "camp_documents/04_General_CAMP/Equipment",
+    f"{DROPBOX_BASE}/04_General_CAMP/Lab_Inventory":              "camp_documents/04_General_CAMP/Lab_Inventory",
     f"{DROPBOX_BASE}/04_General_CAMP":                            "camp_documents/04_General_CAMP",
 }
 
