@@ -138,7 +138,7 @@ def get_local_file_list():
             continue
         files = [
             f for f in sorted(os.listdir(local_path))
-            if f.lower().endswith((".pdf", ".docx"))
+            if f.lower().endswith((".pdf", ".docx", ".xlsx", ".xls"))
             and not f.startswith(("~", "."))
         ]
         if files:
