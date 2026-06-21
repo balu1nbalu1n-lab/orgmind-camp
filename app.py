@@ -188,11 +188,11 @@ legal_unlocked = st.session_state["legal_unlocked"]
 is_admin = st.session_state["is_admin"]
 is_staff_folder    = selected_folder == "Staff Related"
 is_legal_folder    = selected_folder == "Legal & Contracts"
-is_research_folder = selected_folder == "Research Operations"
+is_research_folder = selected_folder == "Research"
 
 # Exception Analyser: Legal & Contracts folder + admin or legal access only
 show_exception = is_legal_folder and (is_admin or legal_unlocked)
-# Research Synthesis: Research Operations folder only
+# Research Synthesis: Research folder only
 show_synthesis = is_research_folder
 
 tab2 = None
@@ -236,7 +236,7 @@ with tab1:
             "Ask about SMART policies, EHS rules, finance procedures, "
             "leave, travel, claims, onboarding, training or any "
             "general institutional policies and decisions.",
-        "Research Operations":
+        "Research":
             "Ask about lab equipment, inventory, locations, reports, "
             "research project findings, SOPs or risk assessments.",
         "General CAMP":
@@ -512,7 +512,7 @@ INSTRUCTIONS:
             ):
                 result = query(
                     synthesis_prompt,
-                    "Research Operations",
+                    "Research",
                     legal_unlocked=legal_unlocked
                 )
 
@@ -716,7 +716,7 @@ if tab_admin is not None:
                 for coll, label in [
                     ("camp_legal", "Legal & Contracts"),
                     ("camp_staff", "Staff Related"),
-                    ("camp_research_ops", "Research Operations"),
+                    ("camp_research_ops", "Research"),
                     ("camp_general", "General CAMP")
                 ]:
                     try:
@@ -752,10 +752,16 @@ OrgMind-CAMP/
 │   └── Sub-Contracts/
 ├── 02_Staff_Related/
 │   └── SMART-Policies/
-├── 03_Research_Operations/
+├── 03_Research/
 │   ├── Reports/
 │   └── Research-Publications-Presentations-Discussions/
 └── 04_General_CAMP/
+    ├── Activity Risk Assessments/
+    ├── Project Risk Assessment/
+    ├── Safety Orientation and training/
+    ├── SOPs/
+    ├── Equipment/
+    └── Lab_Inventory/
 ```
 
 **After any change in Dropbox:** Sync → Rebuild
@@ -788,7 +794,7 @@ with st.sidebar:
     folder_desc = {
         "Legal & Contracts":   ("⚖️", "RCA · NDA · MTA · LOA"),
         "Staff Related":       ("👥", "Policies · EHS · Finance · HR"),
-        "Research Operations": ("🔬", "Lab · Equipment · Reports · Synthesis"),
+        "Research": ("🔬", "Lab · Equipment · Reports · Synthesis"),
         "General CAMP":        ("📋", "SOPs · Risk Assessments · Safety · EHS"),
         "All (Search Everything)": ("🔍", "All folders"),
     }
