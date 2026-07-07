@@ -752,10 +752,16 @@ OrgMind-CAMP/
 │   └── Sub-Contracts/
 ├── 02_Staff_Related/
 │   └── SMART-Policies/
-├── 03_Research_Operations/
+├── 03_Research/
 │   ├── Reports/
 │   └── Research-Publications-Presentations-Discussions/
 └── 04_General_CAMP/
+    ├── Activity Risk Assessments/
+    ├── Project Risk Assessment/
+    ├── Safety Orientation and training/
+    ├── SOPs/
+    ├── Equipment/
+    └── Lab_Inventory/
 ```
 
 **After any change in Dropbox:** Sync → Rebuild
