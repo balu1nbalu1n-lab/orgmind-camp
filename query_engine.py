@@ -1,6 +1,7 @@
 """
-OrgMind @ SMART — CAMP Query Engine v4.2
+OrgMind @ SMART — CAMP Query Engine v4.3
 Clean environment variable reading — no config.txt needed.
+Updated: Research Operations → Research (folder rename)
 """
 
 import os
@@ -15,7 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate
 CHROMA_PATH = "./chroma_db"
 
 def get_folder_options(legal_unlocked=False):
-    base = ["Staff Related", "Research Operations",
+    base = ["Staff Related", "Research",
             "General CAMP", "All (Search Everything)"]
     if legal_unlocked:
         return ["Legal & Contracts"] + base
@@ -25,7 +26,7 @@ def get_collections(department, legal_unlocked=False):
     base = {
         "Legal & Contracts":      ["camp_legal",       "camp_general"],
         "Staff Related":          ["camp_staff",        "camp_general"],
-        "Research Operations":    ["camp_research_ops", "camp_general"],
+        "Research":               ["camp_research_ops", "camp_general"],
         "General CAMP":           ["camp_general"],
         "All (Search Everything)":["camp_staff", "camp_research_ops", "camp_general"],
     }
@@ -39,7 +40,7 @@ def get_collections(department, legal_unlocked=False):
 CAMP_COLLECTIONS = {
     "Legal & Contracts":      ["camp_legal",       "camp_general"],
     "Staff Related":          ["camp_staff",        "camp_general"],
-    "Research Operations":    ["camp_research_ops", "camp_general"],
+    "Research":               ["camp_research_ops", "camp_general"],
     "General CAMP":           ["camp_general"],
     "All (Search Everything)":["camp_staff", "camp_research_ops", "camp_general"],
 }
