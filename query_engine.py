@@ -133,13 +133,23 @@ def query(question, department="All (Search Everything)",
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     collections = get_collections(department, legal_unlocked)
 
-    # Pull a generous candidate pool from EACH collection (so we don't miss
-    # anything genuinely relevant that happens to sit in a smaller
-    # collection), but keep the (doc, distance) score so we can rank
-    # everything together afterwards. Lower distance = more relevant.
-    CANDIDATE_POOL_PER_COLLECTION = max(k, 100)
+    # camp_general is attached to almost every department as supplementary
+    # context. At small k this was harmless; at large k it can flood out
+    # the collection the query is actually about (e.g. a Research query
+    # pulling in dozens of Risk Assessment SOPs). So: the collection(s)
+    # that ARE the department get the full k; camp_general, when it's
+    # riding along as a supplement rather than being the actual target,
+    # is capped to a small fixed quota instead.
+    #
+    # NOTE: comparing raw similarity distance across different Chroma
+    # collections is not reliable (different content profiles can skew
+    # what counts as "close"), so collections are queried independently
+    # and simply concatenated -- not globally re-ranked against each
+    # other.
+    GENERAL_SUPPLEMENT_K = 15
+    is_general_the_actual_target = (department == "General CAMP")
 
-    scored_candidates = []
+    all_docs = []
     for coll in collections:
         try:
             vs = Chroma(
@@ -147,24 +157,27 @@ def query(question, department="All (Search Everything)",
                 persist_directory=CHROMA_PATH,
                 embedding_function=embeddings
             )
-            scored = vs.similarity_search_with_score(
-                question, k=CANDIDATE_POOL_PER_COLLECTION)
+            coll_k = k
+            if coll == "camp_general" and not is_general_the_actual_target:
+                coll_k = GENERAL_SUPPLEMENT_K
+
+            docs = vs.similarity_search(question, k=coll_k)
             if doc_type_filter:
                 keywords = AGREEMENT_TYPE_KEYWORDS.get(
                     doc_type_filter.upper(), [])
                 if keywords:
                     filtered = [
-                        (d, dist) for d, dist in scored if any(
+                        d for d in docs if any(
                             kw.upper() in
                             d.metadata.get("source", "").upper()
                             for kw in keywords)
                     ]
-                    scored = filtered if filtered else scored
-            scored_candidates.extend(scored)
+                    docs = filtered if filtered else docs
+            all_docs.extend(docs)
         except Exception:
             pass
 
-    if not scored_candidates:
+    if not all_docs:
         return {
             "answer": (
                 f"I could not find relevant documents for this query "
@@ -173,15 +186,6 @@ def query(question, department="All (Search Everything)",
             ),
             "sources": [], "chunks_used": 0
         }
-
-    # Rank ALL candidates together across collections (lower distance =
-    # more relevant) and keep only the true top-k overall. This is the
-    # fix for "camp_general SOPs flooding in": a collection contributing
-    # only weak matches will simply rank low and get trimmed out here,
-    # rather than automatically supplying its full k-sized quota.
-    scored_candidates.sort(key=lambda pair: pair[1])
-    top = scored_candidates[:k]
-    all_docs = [doc for doc, _dist in top]
 
     context = "\n\n---\n\n".join(
         f"[Source: {d.metadata.get('source', 'unknown')}]\n{d.page_content}"
@@ -209,5 +213,4 @@ def query(question, department="All (Search Everything)",
             d.metadata.get("source", "") for d in all_docs)),
         "chunks_used": len(all_docs),
         "k_used": k,
-        "weakest_relevance_distance": top[-1][1] if top else None,
     }
