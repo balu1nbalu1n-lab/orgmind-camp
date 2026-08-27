@@ -1,16 +1,25 @@
 """
-OrgMind @ SMART — CAMP Query Engine v5.0
+OrgMind @ SMART — CAMP Query Engine v5.1
 ==========================================
-New in v5.0:
-  - Retrieval depth (k) substantially increased, enabled by Claude's
-    1M-token context window (Sonnet 4.6 / Sonnet 5). Default queries now
-    pull far more of the knowledge base per question, reducing the chance
-    that a relevant chunk is missed simply because it fell outside a
-    narrow top-16 similarity search.
-  - System prompt caching enabled (Anthropic prompt caching) — the
-    (static, unchanging) system prompt is now cached server-side,
-    cutting its per-query cost by ~10x on repeat calls.
-  - k values are now configurable per call rather than hardcoded.
+New in v5.1:
+  - Follow-up conversational queries. Callers may pass conversation_history
+    (a list of {"question", "answer"} dicts for prior turns in the same
+    session). Two things happen with it:
+      1. Retrieval: the current question is combined with the most recent
+         prior question when searching Chroma, so short follow-ups like
+         "what about for MTA instead?" retrieve sensibly even though the
+         question alone has little to search on.
+      2. Generation: prior turns are sent to Claude as compact Human/AI
+         message pairs (question text + final answer text only) -- NOT
+         their retrieved chunk context. This keeps multi-turn conversations
+         cheap and bounded; only the CURRENT turn's retrieval is sent as
+         full document context.
+
+Carried over from v5.0:
+  - Retrieval depth (k) substantially increased (1M-token context window)
+  - System prompt caching enabled
+  - camp_general capped as a supplementary collection to avoid flooding
+    out the department actually being queried
 
 Carried over from v4.3:
   - Research Operations -> Research folder rename
@@ -24,7 +33,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 CHROMA_PATH = "./chroma_db"
 
@@ -37,6 +46,12 @@ CHROMA_PATH = "./chroma_db"
 # becomes a concern before prompt-caching/batching optimisations land.
 DEFAULT_K = 150
 SYNTHESIS_K = 250
+
+# ── Follow-up conversation settings ───────────────────────────────────────
+# How many prior turns to keep, even if the caller passes more. Keeps
+# per-request size bounded and predictable regardless of how long a
+# session has been running.
+MAX_HISTORY_TURNS = 6
 
 def get_folder_options(legal_unlocked=False):
     base = ["Staff Related", "Research",
@@ -85,7 +100,10 @@ Rules:
 3. CITE your source — exact filename for every factual claim.
 4. Reason about SPIRIT and INTENT, not just literal wording.
 5. Classify as STANDARD | WATCH | CRITICAL when comparing practice.
-6. If genuinely not present say:
+6. If the person asks a follow-up question, use the prior conversation
+   to understand what they mean (e.g. "what about for MTA instead"), but
+   still answer ONLY from the document context provided for THIS turn.
+7. If genuinely not present say:
    "I could not find this in the CAMP knowledge base.
    Tip: Try rephrasing with different keywords, or ask your
    administrator to add the relevant document."
@@ -119,9 +137,26 @@ def _cached_system_message():
     ])
 
 
+def _build_retrieval_query(question, conversation_history):
+    """
+    For a fresh question, retrieval uses the question alone (unchanged
+    behaviour). For a follow-up, short questions like "what about for MTA
+    instead?" retrieve poorly on their own -- so the most recent prior
+    question is prepended to give the embedding search something concrete
+    to match against.
+    """
+    if not conversation_history:
+        return question
+    last_turn = conversation_history[-1]
+    last_question = last_turn.get("question", "")
+    if not last_question:
+        return question
+    return f"{last_question}\n{question}"
+
+
 def query(question, department="All (Search Everything)",
           doc_type_filter=None, legal_unlocked=False,
-          k=None, is_synthesis=None):
+          k=None, is_synthesis=None, conversation_history=None):
 
     # Allow explicit override; otherwise infer from question text as before,
     # falling back to the new, much larger defaults.
@@ -129,6 +164,9 @@ def query(question, department="All (Search Everything)",
         is_synthesis = "RESEARCH SYNTHESIS" in question
     if k is None:
         k = SYNTHESIS_K if is_synthesis else DEFAULT_K
+
+    conversation_history = (conversation_history or [])[-MAX_HISTORY_TURNS:]
+    retrieval_query = _build_retrieval_query(question, conversation_history)
 
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     collections = get_collections(department, legal_unlocked)
@@ -161,7 +199,7 @@ def query(question, department="All (Search Everything)",
             if coll == "camp_general" and not is_general_the_actual_target:
                 coll_k = GENERAL_SUPPLEMENT_K
 
-            docs = vs.similarity_search(question, k=coll_k)
+            docs = vs.similarity_search(retrieval_query, k=coll_k)
             if doc_type_filter:
                 keywords = AGREEMENT_TYPE_KEYWORDS.get(
                     doc_type_filter.upper(), [])
@@ -200,11 +238,27 @@ def query(question, department="All (Search Everything)",
     # Built directly (rather than via ChatPromptTemplate) so the system
     # message can carry the cache_control block -- ChatPromptTemplate's
     # simple ("system", str) tuple form does not expose this.
+    #
+    # Prior turns are included as plain Human/AI message pairs -- question
+    # and final answer text only. Their original retrieved chunk context
+    # is deliberately NOT replayed here; only the CURRENT turn carries a
+    # full document context block. This keeps a long conversation's token
+    # cost roughly constant per turn rather than growing every turn.
+    history_messages = []
+    for turn in conversation_history:
+        q = turn.get("question", "")
+        a = turn.get("answer", "")
+        if q:
+            history_messages.append(HumanMessage(content=q))
+        if a:
+            history_messages.append(AIMessage(content=a))
+
     human_content = QUERY_TEMPLATE.format(question=question, context=context)
-    messages = [
-        _cached_system_message(),
-        {"role": "user", "content": human_content},
-    ]
+    messages = (
+        [_cached_system_message()]
+        + history_messages
+        + [{"role": "user", "content": human_content}]
+    )
     response = llm.invoke(messages)
 
     return {
@@ -214,3 +268,4 @@ def query(question, department="All (Search Everything)",
         "chunks_used": len(all_docs),
         "k_used": k,
     }
+

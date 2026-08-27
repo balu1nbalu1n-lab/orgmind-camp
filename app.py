@@ -41,7 +41,8 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "campadmin2026")
 for key, val in [
     ("authenticated", False), ("is_admin", False),
     ("legal_unlocked", False), ("clear_count", 0),
-    ("query_text", "")
+    ("query_text", ""),
+    ("askorg_history", []), ("askorg_last_folder", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -249,44 +250,81 @@ with tab1:
         f'<div class="hint-box">💡 {hints.get(selected_folder, "Ask OrgMind anything about CAMP.")}</div>',
         unsafe_allow_html=True)
 
+    # Switching folders mid-conversation changes what's being searched, so
+    # the running thread no longer applies to the new selection -- start a
+    # fresh conversation automatically rather than silently mixing topics.
+    if st.session_state["askorg_last_folder"] is None:
+        st.session_state["askorg_last_folder"] = selected_folder
+    elif st.session_state["askorg_last_folder"] != selected_folder:
+        st.session_state["askorg_history"] = []
+        st.session_state["askorg_last_folder"] = selected_folder
+
+    # ── Render the conversation so far ──────────────────────────────────
+    for i, turn in enumerate(st.session_state["askorg_history"]):
+        with st.chat_message("user"):
+            st.markdown(turn["question"])
+        with st.chat_message("assistant"):
+            st.markdown(
+                f'<div class="answer-box">{turn["answer"]}</div>',
+                unsafe_allow_html=True)
+            if turn.get("sources"):
+                unique = sorted(set(s for s in turn["sources"] if s))
+                st.markdown("**Documents consulted:**")
+                html = " ".join(
+                    f'<span class="source-tag">{s}</span>' for s in unique)
+                st.markdown(html, unsafe_allow_html=True)
+            fb1, fb2, _ = st.columns([1, 1, 5])
+            fb1.button("👍  Helpful", key=f"fb_yes_{i}")
+            fb2.button("👎  Not helpful", key=f"fb_no_{i}")
+
+    has_thread = len(st.session_state["askorg_history"]) > 0
+    box_label = "Ask a follow-up question:" if has_thread else "Your question:"
+
     query_text = st.text_area(
-        "Your question:",
+        box_label,
         value=st.session_state.get("query_text", ""),
         height=100,
         key=f'qbox_{st.session_state["clear_count"]}',
         placeholder="Type your question here in your own words..."
     )
 
-    s_col, c_col = st.columns([5, 1])
+    s_col, c_col, n_col = st.columns([4, 1, 1])
     with s_col:
-        search_clicked = st.button("🔍  Search CAMP Knowledge Base",
-                                    type="primary", use_container_width=True)
+        search_clicked = st.button(
+            "🔍  Ask Follow-up" if has_thread else "🔍  Search CAMP Knowledge Base",
+            type="primary", use_container_width=True)
     with c_col:
         if st.button("Clear", use_container_width=True):
             st.session_state["query_text"] = ""
             st.session_state["clear_count"] += 1
             st.rerun()
+    with n_col:
+        if st.button("New topic", use_container_width=True,
+                      disabled=not has_thread,
+                      help="Start a fresh conversation (forgets the current thread)"):
+            st.session_state["askorg_history"] = []
+            st.session_state["query_text"] = ""
+            st.session_state["clear_count"] += 1
+            st.rerun()
 
     if search_clicked and query_text.strip():
-        st.session_state["query_text"] = query_text.strip()
-        with st.spinner("Searching CAMP's institutional memory..."):
+        asked = query_text.strip()
+        st.session_state["query_text"] = ""
+        st.session_state["clear_count"] += 1
+        spinner_msg = ("Thinking about your follow-up..." if has_thread
+                        else "Searching CAMP's institutional memory...")
+        with st.spinner(spinner_msg):
             result = query(
-                query_text.strip(), selected_folder,
-                legal_unlocked=legal_unlocked
+                asked, selected_folder,
+                legal_unlocked=legal_unlocked,
+                conversation_history=st.session_state["askorg_history"],
             )
-        st.markdown("### Answer")
-        st.markdown(
-            f'<div class="answer-box">{result["answer"]}</div>',
-            unsafe_allow_html=True)
-        if result["sources"]:
-            unique = sorted(set(s for s in result["sources"] if s))
-            st.markdown("**Documents consulted:**")
-            html = " ".join(
-                f'<span class="source-tag">{s}</span>' for s in unique)
-            st.markdown(html, unsafe_allow_html=True)
-        fb1, fb2, _ = st.columns([1, 1, 5])
-        fb1.button("👍  Helpful", key="fb_yes")
-        fb2.button("👎  Not helpful", key="fb_no")
+        st.session_state["askorg_history"].append({
+            "question": asked,
+            "answer": result["answer"],
+            "sources": result.get("sources", []),
+        })
+        st.rerun()
     elif search_clicked:
         st.warning("Please type your question before searching.")
 
