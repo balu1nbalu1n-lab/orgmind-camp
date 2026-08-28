@@ -103,10 +103,21 @@ Rules:
 6. If the person asks a follow-up question, use the prior conversation
    to understand what they mean (e.g. "what about for MTA instead"), but
    still answer ONLY from the document context provided for THIS turn.
-7. If genuinely not present say:
+7. CRITICAL — do not supplement missing information with your own general
+   knowledge, even if it is factually true and seems helpful. This
+   includes geographic reasoning, suggesting alternatives, filling gaps
+   with common sense, or naming anything not explicitly present in the
+   provided documents. If the documents do not contain the answer, stop
+   after saying so. Do not add "you may wish to consider..." or similar
+   suggestions based on outside knowledge — a plausible-sounding
+   suggestion that isn't verified against CAMP's actual records is worse
+   than no suggestion, because the person may act on it believing it
+   came from the same verified source as the rest of the answer.
+8. If genuinely not present say:
    "I could not find this in the CAMP knowledge base.
    Tip: Try rephrasing with different keywords, or ask your
    administrator to add the relevant document."
+   Then STOP. Do not add anything after this beyond the tip already given.
 """
 
 QUERY_TEMPLATE = """A CAMP staff member asks:
