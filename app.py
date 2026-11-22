@@ -7,6 +7,7 @@ import streamlit as st
 import tempfile
 import os
 from query_engine import query, get_folder_options, get_collections, CAMP_COLLECTIONS
+from docx_export import generate_docx
 
 st.set_page_config(
     page_title="OrgMind — CAMP @ SMART",
@@ -412,12 +413,18 @@ if tab2 is not None:
                         for s in sorted(set(s for s in result["sources"] if s)))
                     st.markdown(html, unsafe_allow_html=True)
 
+                base_name = os.path.splitext(uploaded.name)[0]
                 st.download_button(
-                    "📥  Download Report",
-                    data=f"EXCEPTION REPORT — {doc_type}\nDocument: {uploaded.name}\n{'='*60}\n\n{result['answer']}",
-                    file_name=uploaded.name.replace(
-                        ".pdf", f"_{doc_type}_ExceptionReport.txt"
-                    ).replace(".docx", f"_{doc_type}_ExceptionReport.txt"),
+                    "📥  Download Report (Word)",
+                    data=generate_docx(
+                        f"Exception Report — {doc_type}  |  Document: {uploaded.name}",
+                        result["answer"],
+                        sorted(set(s for s in result.get("sources", []) if s)),
+                        "Legal & Contracts",
+                        result.get("model", "claude-sonnet-4-6"),
+                    ),
+                    file_name=f"{base_name}_{doc_type}_ExceptionReport.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True
                 )
 
@@ -571,18 +578,18 @@ INSTRUCTIONS:
                     f'<span class="source-tag">{s}</span>' for s in unique)
                 st.markdown(html, unsafe_allow_html=True)
 
-            report = (
-                f"RESEARCH SYNTHESIS REPORT\n"
-                f"Mode: {synthesis_mode}\n"
-                f"Depth: {depth}\n"
-                f"{'='*60}\n\n"
-                f"{result['answer']}"
-            )
+            mode_label = synthesis_mode if 'Custom' not in synthesis_mode else custom_q.strip()
             st.download_button(
-                "📥  Download Synthesis Report",
-                data=report,
-                file_name="CAMP_Research_Synthesis_Report.txt",
-                mime="text/plain",
+                "📥  Download Synthesis Report (Word)",
+                data=generate_docx(
+                    f"Research Synthesis — {mode_label}  |  Depth: {depth}",
+                    result["answer"],
+                    sorted(set(s for s in result.get("sources", []) if s)),
+                    "Research",
+                    result.get("model", "claude-sonnet-4-6"),
+                ),
+                file_name="CAMP_Research_Synthesis_Report.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True
             )
 
