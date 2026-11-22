@@ -9,6 +9,21 @@ import os
 from query_engine import query, get_folder_options, get_collections, CAMP_COLLECTIONS
 from docx_export import generate_docx
 
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def safe_download_button(*args, **kwargs):
+    """Download button that does NOT trigger a page rerun when clicked
+    (newer Streamlit); falls back to a normal button on older versions."""
+    try:
+        major, minor = (int(x) for x in st.__version__.split(".")[:2])
+        supports_ignore = (major, minor) >= (1, 43)
+    except Exception:
+        supports_ignore = False
+    if supports_ignore:
+        return st.download_button(*args, on_click="ignore", **kwargs)
+    return st.download_button(*args, **kwargs)
+
 st.set_page_config(
     page_title="OrgMind — CAMP @ SMART",
     page_icon="🧠", layout="wide",
@@ -401,32 +416,43 @@ if tab2 is not None:
                         legal_unlocked=True
                     )
 
-                st.markdown("---")
-                st.markdown(f"## Exception Report — {doc_type}")
-                st.markdown(f"`{uploaded.name}`")
-                st.markdown("---")
-                st.markdown(result["answer"])
-
-                if result["sources"]:
-                    html = " ".join(
-                        f'<span class="source-tag">{s}</span>'
-                        for s in sorted(set(s for s in result["sources"] if s)))
-                    st.markdown(html, unsafe_allow_html=True)
-
-                base_name = os.path.splitext(uploaded.name)[0]
-                st.download_button(
-                    "📥  Download Report (Word)",
-                    data=generate_docx(
+                # Keep the finished report in the session so it (and the
+                # download button) survive Streamlit reruns, e.g. when the
+                # download button is clicked.
+                exc_sources = sorted(set(s for s in result.get("sources", []) if s))
+                st.session_state["exc_report"] = {
+                    "doc_type": doc_type,
+                    "filename": uploaded.name,
+                    "answer": result["answer"],
+                    "sources": exc_sources,
+                    "docx": generate_docx(
                         f"Exception Report — {doc_type}  |  Document: {uploaded.name}",
-                        result["answer"],
-                        sorted(set(s for s in result.get("sources", []) if s)),
-                        "Legal & Contracts",
-                        result.get("model", "claude-sonnet-4-6"),
-                    ),
-                    file_name=f"{base_name}_{doc_type}_ExceptionReport.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
+                        result["answer"], exc_sources, "Legal & Contracts",
+                        result.get("model", "claude-sonnet-4-6")),
+                }
+
+        rep = st.session_state.get("exc_report")
+        if rep:
+            st.markdown("---")
+            st.markdown(f"## Exception Report — {rep['doc_type']}")
+            st.markdown(f"`{rep['filename']}`")
+            st.markdown("---")
+            st.markdown(rep["answer"])
+
+            if rep["sources"]:
+                html = " ".join(
+                    f'<span class="source-tag">{s}</span>' for s in rep["sources"])
+                st.markdown(html, unsafe_allow_html=True)
+
+            safe_download_button(
+                "📥  Download Report (Word)",
+                data=rep["docx"],
+                file_name=(f"{os.path.splitext(rep['filename'])[0]}_"
+                           f"{rep['doc_type']}_ExceptionReport.docx"),
+                mime=DOCX_MIME,
+                use_container_width=True,
+                key="dl_exception",
+            )
 
 
 # ══ TAB 3: RESEARCH SYNTHESIS ════════════════════════════════════════════════
@@ -561,36 +587,46 @@ INSTRUCTIONS:
                     legal_unlocked=legal_unlocked
                 )
 
+            # Keep the finished report in the session so it (and the
+            # download button) survive Streamlit reruns, e.g. when the
+            # download button is clicked.
+            mode_label = (synthesis_mode if 'Custom' not in synthesis_mode
+                          else custom_q.strip()[:200])
+            syn_sources = sorted(set(s for s in result.get("sources", []) if s))
+            st.session_state["synth_report"] = {
+                "mode_label": mode_label,
+                "depth": depth,
+                "answer": result["answer"],
+                "sources": syn_sources,
+                "docx": generate_docx(
+                    f"Research Synthesis — {mode_label}  |  Depth: {depth}",
+                    result["answer"], syn_sources, "Research",
+                    result.get("model", "claude-sonnet-4-6")),
+            }
+
+        rep = st.session_state.get("synth_report")
+        if rep:
             st.markdown("---")
             st.markdown("## Synthesis Report")
-            st.markdown(
-                f"**Mode:** {synthesis_mode if 'Custom' not in synthesis_mode else custom_q[:60]+'...'}"
-            )
-            st.markdown(f"**Depth:** {depth}")
+            st.markdown(f"**Mode:** {rep['mode_label']}")
+            st.markdown(f"**Depth:** {rep['depth']}")
             st.markdown("---")
-            st.markdown(result["answer"])
+            st.markdown(rep["answer"])
 
-            if result.get("sources"):
+            if rep["sources"]:
                 st.markdown("---")
-                unique = sorted(set(s for s in result["sources"] if s))
                 st.markdown("**Documents analysed:**")
                 html = " ".join(
-                    f'<span class="source-tag">{s}</span>' for s in unique)
+                    f'<span class="source-tag">{s}</span>' for s in rep["sources"])
                 st.markdown(html, unsafe_allow_html=True)
 
-            mode_label = synthesis_mode if 'Custom' not in synthesis_mode else custom_q.strip()
-            st.download_button(
+            safe_download_button(
                 "📥  Download Synthesis Report (Word)",
-                data=generate_docx(
-                    f"Research Synthesis — {mode_label}  |  Depth: {depth}",
-                    result["answer"],
-                    sorted(set(s for s in result.get("sources", []) if s)),
-                    "Research",
-                    result.get("model", "claude-sonnet-4-6"),
-                ),
+                data=rep["docx"],
                 file_name="CAMP_Research_Synthesis_Report.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
+                mime=DOCX_MIME,
+                use_container_width=True,
+                key="dl_synthesis",
             )
 
 # ══ ADMIN TAB ═════════════════════════════════════════════════════════════════
