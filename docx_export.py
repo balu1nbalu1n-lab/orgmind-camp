@@ -29,6 +29,51 @@ FONT = "Calibri"
 _INLINE = re.compile(r"(\*\*\*.+?\*\*\*|\*\*.+?\*\*|\*.+?\*|`.+?`)")
 
 
+def _norm(s):
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _stem(name):
+    name = str(name).replace("\\", "/").split("/")[-1]
+    return re.sub(r"\.(pdf|docx?|xlsx?|pptx?|txt|csv)$", "", name.strip(), flags=re.I)
+
+
+def filter_cited_sources(answer_md, sources):
+    """Keep only the source documents the answer actually refers to.
+
+    Retrieval pulls in many documents that are merely checked for relevance;
+    a document counts as used only if the report names it (full file name,
+    a truncated file name, or its RA-xxxx-xxx reference code).
+    """
+    text_norm = _norm(answer_md)
+    tokens = set()
+    for tok in re.findall(r"\d{4}-\d{2}_[^\s,;:()\[\]\"'\u201c\u201d]+", answer_md):
+        tok = re.sub(r"\.(pdf|docx?|xlsx?|pptx?)\b.*$", "", tok, flags=re.I)
+        tok = _norm(tok)
+        if len(tok) >= 26:
+            tokens.add(tok)
+    ra_ids = {r.upper() for r in re.findall(r"RA-\d{4}-\d{3}", answer_md, flags=re.I)}
+
+    cited, seen = [], set()
+    for s in sources:
+        name = s if isinstance(s, str) else (
+            s.get("source") or s.get("name") or s.get("file") or str(s))
+        if name in seen:
+            continue
+        seen.add(name)
+        stem = _stem(name)
+        n = _norm(stem)
+        if not n:
+            continue
+        hit = n in text_norm or any(n.startswith(t) for t in tokens)
+        if not hit:
+            m = re.match(r"(RA-\d{4}-\d{3})", stem, flags=re.I)
+            hit = bool(m and m.group(1).upper() in ra_ids)
+        if hit:
+            cited.append(name)
+    return cited
+
+
 def _strip_trailing_sources_line(answer_md):
     pattern = re.compile(r"\n*\*{0,2}Sources? consulted:?\*{0,2}.*$", re.IGNORECASE | re.DOTALL)
     return pattern.sub("", answer_md).strip()
@@ -126,7 +171,7 @@ def _render_markdown(doc, md):
         if m:
             level = min(len(m.group(1)), 3)
             h = doc.add_heading(level=level)
-            _add_runs(h, m.group(2), color=NAVY)
+            _add_runs(h, m.group(2), color=NAVY, bold_all=True)
             i += 1
             continue
 
@@ -152,18 +197,42 @@ def _render_markdown(doc, md):
             i += 1
             continue
 
+        if stripped.startswith(">"):
+            qlines = []
+            while i < len(lines) and lines[i].strip().startswith(">"):
+                qlines.append(lines[i].strip().lstrip(">").strip())
+                i += 1
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Cm(0.8)
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            for k, ql in enumerate(qlines):
+                if k:
+                    p.add_run().add_break()
+                start = len(p.runs)
+                _add_runs(p, ql, color=RGBColor(0x40, 0x40, 0x40))
+                if not ql.startswith("\u2014"):
+                    for r in p.runs[start:]:
+                        r.italic = True
+            continue
+
         # Paragraph: gather consecutive plain lines
         buf = [stripped]
         i += 1
         while i < len(lines):
             nxt = lines[i].strip()
-            if (not nxt or re.match(r"^(#{1,6}\s|[-*+]\s|\d+[.)]\s)", nxt)
+            if (not nxt or re.match(r"^(#{1,6}\s|[-*+]\s|\d+[.)]\s|>)", nxt)
                     or ("|" in nxt and i + 1 < len(lines) and _is_sep(lines[i + 1]))):
                 break
             buf.append(nxt)
             i += 1
         p = doc.add_paragraph()
         _add_runs(p, " ".join(buf))
+
+
+def _head(doc, text, level=2):
+    h = doc.add_heading(level=level)
+    _add_runs(h, text, color=NAVY, bold_all=True)
+    return h
 
 
 def generate_docx(question, answer_md, sources, department, model_name,
@@ -183,6 +252,7 @@ def generate_docx(question, answer_md, sources, department, model_name,
         st = doc.styles[name]
         st.font.name = FONT
         st.font.color.rgb = NAVY
+        st.font.bold = True
         st.element.rPr.rFonts.set(qn("w:eastAsia"), FONT)
 
     # Title block
@@ -194,22 +264,17 @@ def generate_docx(question, answer_md, sources, department, model_name,
               f"Generated: {datetime.now().strftime('%d %b %Y, %H:%M')}",
               size=9, color=GREY)
 
-    doc.add_heading("Question", level=2)
+    _head(doc, "Question")
     q = doc.add_paragraph()
     _add_runs(q, question)
 
-    doc.add_heading("Response", level=2)
+    _head(doc, "Response")
     _render_markdown(doc, _strip_trailing_sources_line(answer_md))
 
-    if sources:
-        doc.add_heading("Documents Consulted", level=2)
-        seen = []
-        for s in sources:
-            name = s if isinstance(s, str) else (
-                s.get("source") or s.get("name") or s.get("file") or str(s))
-            if name not in seen:
-                seen.append(name)
-        for name in seen:
+    cited = filter_cited_sources(answer_md, sources or [])
+    if cited:
+        _head(doc, "Documents Referenced")
+        for name in cited:
             p = doc.add_paragraph(style="List Bullet")
             _add_runs(p, name, size=10)
 

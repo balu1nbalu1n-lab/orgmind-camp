@@ -7,7 +7,7 @@ import streamlit as st
 import tempfile
 import os
 from query_engine import query, get_folder_options, get_collections, CAMP_COLLECTIONS
-from docx_export import generate_docx
+from docx_export import generate_docx, filter_cited_sources
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -283,8 +283,11 @@ with tab1:
             st.markdown(
                 f'<div class="answer-box">{turn["answer"]}</div>',
                 unsafe_allow_html=True)
-            if turn.get("sources"):
-                unique = sorted(set(s for s in turn["sources"] if s))
+            # Show only documents the answer actually refers to, not every
+            # document that was retrieved while searching.
+            unique = sorted(filter_cited_sources(
+                turn["answer"], [s for s in turn.get("sources", []) if s]))
+            if unique:
                 st.markdown("**Documents consulted:**")
                 html = " ".join(
                     f'<span class="source-tag">{s}</span>' for s in unique)
@@ -419,7 +422,8 @@ if tab2 is not None:
                 # Keep the finished report in the session so it (and the
                 # download button) survive Streamlit reruns, e.g. when the
                 # download button is clicked.
-                exc_sources = sorted(set(s for s in result.get("sources", []) if s))
+                exc_sources = sorted(filter_cited_sources(
+                    result["answer"], [s for s in result.get("sources", []) if s]))
                 st.session_state["exc_report"] = {
                     "doc_type": doc_type,
                     "filename": uploaded.name,
@@ -592,7 +596,8 @@ INSTRUCTIONS:
             # download button is clicked.
             mode_label = (synthesis_mode if 'Custom' not in synthesis_mode
                           else custom_q.strip()[:200])
-            syn_sources = sorted(set(s for s in result.get("sources", []) if s))
+            syn_sources = sorted(filter_cited_sources(
+                result["answer"], [s for s in result.get("sources", []) if s]))
             st.session_state["synth_report"] = {
                 "mode_label": mode_label,
                 "depth": depth,
